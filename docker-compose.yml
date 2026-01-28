@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+    # Mount volumes for development if needed, but this is a standalone tool
+    # volumes:
+    #   - ./backend:/app/backend
+    #   - ./frontend:/app/frontend
