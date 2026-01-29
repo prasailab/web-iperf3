@@ -3,14 +3,20 @@
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Build](https://img.shields.io/badge/build-docker--ready-orange.svg)
+![Visibility](https://img.shields.io/badge/visibility-public-brightgreen.svg)
 
-A modern, full-stack web application for running network performance tests using **iperf3**. This tool provides a clean, responsive web interface to run TCP/UDP throughput tests against public or private servers, measure Round-Trip Time (RTT), and calculate Bandwidth-Delay Product (BDP) for network tuning.
+A modern, full-stack web application for running network performance tests using **iperf3**. This tool is now **Publicly Available** and provides a clean, responsive web interface to run TCP/UDP throughput tests against public or private servers, measure Round-Trip Time (RTT), and calculate Bandwidth-Delay Product (BDP) for network tuning.
 
 ---
 
 ## 🚀 Overview
 
-This package simplifies network testing by wrapping the powerful `iperf3` command-line utility in a professional web-based dashboard. It is designed for network engineers, sysadmins, and developers who need to perform quick throughput audits without diving into the terminal on every client machine.
+This package is an Open Source project designed to simplify network testing. It wraps the powerful `iperf3` command-line utility in a professional, user-friendly web dashboard. Whether you are a network engineer, a sysadmin, or a curious developer, you can download, integrate, and deploy this tool in minutes to perform throughput audits without the complexity of terminal-only clients.
+
+### 🌟 Why use Web iPerf3 Tool?
+- **Universal Accessibility**: Run tests from any device with a browser.
+- **Easy Integration**: Small footprint, perfect for adding to internal toolkits or monitoring dashboards.
+- **Ready for Everyone**: No complex configuration required to get started with the Docker version.
 
 ### Key Features
 
@@ -129,12 +135,30 @@ This application exposes core iPerf3 functionality. For a deeper dive into the c
 
 ---
 
+## 🤝 Contributing & Integration
+
+Since this project is now **Public**, contributions are welcome! 
+
+### How to Integrate
+- **As a Standalone Service**: Run the Docker container on your network to provide a speed-test portal for your users.
+- **Embedded in Your App**: The backend provides a simple JSON/Streaming API. You can point your own frontend to our `/api/run-iperf-stream` endpoint.
+- **Microservice**: Use the BDP calculation endpoint `/api/calculate-bdp` as a standalone utility for your network automation scripts.
+
+### How to Contribute
+1.  **Fork** the repository.
+2.  **Create a feature branch** (`git checkout -b feature/cool-new-metric`).
+3.  **Commit your changes** (`git commit -m 'Add support for iPerf2 servers'`).
+4.  **Push to the branch** (`git push origin feature/cool-new-metric`).
+5.  **Open a Pull Request**.
+
+---
+
 ## 📄 License & Attribution
 
 - **Copyright**: (c) 2026 Prasath Suthagar @Praslab.com.
-- **License**: MIT License.
+- **License**: MIT License - Feel free to use, modify, and distribute!
 - **References**: Inspired by the community at [iperf.fr](https://iperf.fr).
 
 ---
 
-*Found a bug or want to contribute? Feel free to open a PR on the GitHub repository.*
+*Found a bug or want to contribute? Feel free to open a PR or Issue on the GitHub repository.*
