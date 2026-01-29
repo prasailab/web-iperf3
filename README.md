@@ -43,7 +43,7 @@ The easiest way to run the application is using Docker. This ensures all depende
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/praslab/web-iperf3.git
+    git clone https://github.com/prasailab/web-iperf3.git
     cd web-iperf3
     ```
 
