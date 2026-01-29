@@ -1,118 +1,140 @@
 # Web-based iPerf3 Tool
 
-A modern, full-stack web application for running network performance tests using **iperf3**. This tool provides a clean web interface to run TCP/UDP throughput tests against public or private servers, measure Round-Trip Time (RTT), and calculate Bandwidth-Delay Product (BDP) for TCP tuning.
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Build](https://img.shields.io/badge/build-docker--ready-orange.svg)
 
-![Screen Shot](https://via.placeholder.com/800x450.png?text=Web+iPerf3+Interface)
+A modern, full-stack web application for running network performance tests using **iperf3**. This tool provides a clean, responsive web interface to run TCP/UDP throughput tests against public or private servers, measure Round-Trip Time (RTT), and calculate Bandwidth-Delay Product (BDP) for network tuning.
 
-## Features
+---
 
-- **Public & Private Servers**: 
-  - Choose from a built-in list of public iPerf3 servers (data from iperf.fr).
-  - Connect to any private server by hostname and port.
-- **Test Configuration**: 
-  - TCP & UDP protocol support.
-  - Configurable duration, parallel streams, and target bitrate (UDP).
-  - Reverse mode support.
-- **BDP Calculator**: 
-  - Integrated tool to calculate Bandwidth-Delay Product and recommended TCP Receive Window sizes based on RFC 6349.
-  - integrated Ping tool to measure RTT.
-- **Modern UI**: Built with React, TypeScript, and Tailwind CSS.
-- **Container Ready**: Includes Dockerfile for easy deployment.
+## 🚀 Overview
 
-## Tech Stack
+This package simplifies network testing by wrapping the powerful `iperf3` command-line utility in a professional web-based dashboard. It is designed for network engineers, sysadmins, and developers who need to perform quick throughput audits without diving into the terminal on every client machine.
 
-- **Frontend**: React, Vite, TypeScript, Tailwind CSS
-- **Backend**: Node.js, Express, TypeScript
-- **Core Tools**: `iperf3`, `ping`
+### Key Features
 
-## Prerequisites
+- **🌐 Public & Private Server Support**: 
+  - Integrated dropdown for popular public iPerf3 servers (data sourced from iperf.fr).
+  - Manual connection to any private server endpoint.
+- **⚡ Real-time Streaming**:
+  - Live progress updates using chunked transfer encoding (the output updates line-by-line as the test runs).
+- **🛠️ Advanced Test Configuration**: 
+  - Switch between **TCP** (reliability) and **UDP** (jitter/packet loss).
+  - Support for **Reverse Mode** (Server -> Client) and **Bidirectional** testing.
+  - Granular control over duration, parallel streams, and target bitrate.
+- **📏 BDP Calculator & Tuning**: 
+  - Calculate **Bandwidth-Delay Product** and recommended TCP Receive Window sizes based on **RFC 6349**.
+  - Built-in Ping tool to accurately measure RTT before calculating.
+- **🎨 Premium UI**: 
+  - Dark-mode optimized dashboard built with React, TypeScript, and Tailwind CSS.
+- **🐳 Containerized**: 
+  - Fully Docker-ready for consistent cross-platform deployment.
 
-- **Node.js v18+** (if running without Docker)
-- **iperf3** installed and available in system PATH.
-  - **Linux**: `apt install iperf3` (Debian/Ubuntu) or `yum install iperf3` (RHEL/CentOS)
-  - **Windows**: Download from [iperf.fr](https://iperf.fr/iperf-download.php) and add to PATH.
-  - **macOS**: `brew install iperf3`
-- **ping**
-  - **Linux**: `iputils-ping` (usually installed)
-  - **Windows**: Built-in `ping.exe`
-  - **macOS**: Built-in `ping`
+---
 
-## Quick Start (Docker)
+## 🛠️ Tech Stack
 
-The easiest way to run the application is using Docker. This ensures all dependencies are packaged correctly.
+- **Frontend**: React (Vite), TypeScript, Tailwind CSS, Lucide Icons.
+- **Backend**: Node.js, Express, TypeScript, Zod (Validation).
+- **Core Native Tools**: `iperf3`, `ping` (iputils).
 
-1.  **Clone the repository**:
+---
+
+## 📦 Installation Guide (Cross-Platform)
+
+The application depends on `iperf3` being installed on the system where the **backend** is running.
+
+### 1. Prerequisites (iPerf3 Installation)
+
+| Platform | Command / Download |
+| :--- | :--- |
+| **Windows** | `winget install ar51an.iPerf3` or download from [iperf.fr](https://iperf.fr/iperf-download.php#windows) |
+| **macOS** | `brew install iperf3` |
+| **Linux (Debian/Ubuntu)** | `sudo apt update && sudo apt install iperf3 iputils-ping` |
+| **Linux (RHEL/CentOS)** | `sudo yum install iperf3` |
+
+### 2. Standard Setup (Node.js)
+
+1.  **Clone the Repository**:
     ```bash
     git clone https://github.com/prasailab/web-iperf3.git
     cd web-iperf3
     ```
 
-2.  **Build and Run**:
-    ```bash
-    docker-compose up --build
-    ```
-
-3.  **Access the App**:
-    Open your browser and navigate to `http://localhost:3000`.
-
-## Manual Setup (Development)
-
-If you prefer to run locally for development:
-
-### Backend
-1.  Navigate to `backend`:
+2.  **Install & Build Backend**:
     ```bash
     cd backend
     npm install
-    ```
-2.  Start the server (default port 3000):
-    ```bash
-    npm run dev
+    npm run build
     ```
 
-### Frontend
-1.  Navigate to `frontend`:
+3.  **Install & Build Frontend**:
     ```bash
-    cd frontend
+    cd ../frontend
     npm install
+    npm run build
     ```
-2.  Start the dev server (default port 5173):
+
+4.  **Start the Application**:
     ```bash
-    npm run dev
+    cd ../backend
+    npm start
     ```
-    *Note: The frontend is configured to proxy `/api` requests to `localhost:3000`.*
+    *The app will be accessible at `http://localhost:3000`.*
 
-## Usage Guide
+### 3. Docker Setup (Recommended)
 
-### Running a Speed Test
-1.  **Select Server**: Toggle between "Public Server List" and "Private Server".
-    - **Public**: Choose a server from the dropdown. Note the location and speed limits.
-    - **Private**: Enter the IP/Hostname and Port of your iperf3 server. Ensure `iperf3 -s` is running on that server.
-2.  **Configure**:
-    - **Protocol**: TCP for standard throughput, UDP for packet loss/jitter.
-    - **Direction**: "Upload" tests your upload speed. "Download" (Reverse) tests your download speed.
-    - **Streams**: Use multiple streams (e.g., 4-8) to saturate high-bandwidth links.
-3.  **Run**: Click "Start iPerf3 Test". Results map will be displayed below.
+Docker handles all dependencies (Node, iperf3, ping) automatically.
 
-### BDP Calculator & TCP Tuning
-The BDP Calculator helps you tune TCP performance for high-speed, high-latency links (Long Fat Networks).
+```bash
+docker-compose up --build
+```
 
-1.  **Measure RTT**: Enter a host (or use the selected server) and click "Measure RTT".
-2.  **Enter Bandwidth**: Input the known bottleneck bandwidth (e.g., your link speed).
-3.  **Calculate**: The tool applies **RFC 6349** formulas:
-    - **BDP (bits)** = Bandwidth (bps) × RTT (sec)
-    - **TCP Window (Bytes)** = BDP / 8
-    - **Theoretical Max Throughput** = Window / RTT
+---
 
-Use the calculated "Recv Window" to tune your system's TCP buffer sizes (`net.ipv4.tcp_rmem` / `tcp_wmem`).
+## 📖 iPerf3 Usage Guide
 
-## Extending the Public Server List
-The public server list is stored in `backend/src/data/publicServers.ts`. 
-To add more servers, edit this file and rebuild the backend. 
-Always verify server availability on [iperf.fr](https://iperf.fr/iperf-servers.php).
+This application exposes core iPerf3 functionality. For a deeper dive into the command-line flags, refer to the [official iperf.fr documentation](https://iperf.fr/iperf-doc.php).
 
-## License
+### Common Flags Explained
 
-Copyright (c) 2026 Prasath Suthagar @Praslab.com.
+- **`-p` (Port)**: The port the server is listening on. Default is `5201`.
+- **`-u` (UDP)**: Swaps from standard TCP to UDP testing. Useful for measuring packet loss and jitter.
+- **`-b` (Bandwidth)**: Crucial for UDP. Unlike TCP, UDP is not "self-throttling". You must specify a target bitrate (e.g., `10M` for 10Mbits/sec).
+- **`-R` (Reverse)**: By default, the client sends data to the server (Upload). Reverse mode makes the server send data to the client (Download).
+- **`-P` (Parallel)**: Opens multiple simultaneous connections. This is often necessary to saturate high-speed links (e.g., 10Gbps).
+- **`-t` (Time)**: Duration of the test in seconds. Default is `10`.
 
-Licensed under the MIT License. See [LICENSE](LICENSE) file for details.
+### Best Practices
+
+1.  **TCP vs UDP**: Use TCP to check real-world throughput. Use UDP to check for network stability (jitter/loss) at a specific speed.
+2.  **Reverse Mode**: Always test both directions. ISP speeds are often asymmetrical.
+3.  **Parallel Streams**: If you aren't seeing the speeds you expect on a high-speed link, try increasing streams to 4 or 8.
+
+---
+
+## 🎛️ Usage Instructions
+
+### Running a Test
+1.  **Server Selection**: Toggle between **Public** (select from list) or **Private** (enter IP).
+2.  **Configuration**: Choose your protocol and direction. If testing high-speed fiber, use multiple streams.
+3.  **Run**: Click **Start iPerf3 Test**. The live output will appear in the results panel.
+
+### BDP Calculation
+1.  Enter the hostname in the BDP Calculator section.
+2.  Click **Measure RTT** to get a real-time ping result.
+3.  Enter your "Bottleneck Bandwidth" (e.g., 1000 for 1Gbps).
+4.  The tool will automatically calculate the required **TCP Window Size** to maximize that specific link.
+
+---
+
+## 📄 License & Attribution
+
+- **Copyright**: (c) 2026 Prasath Suthagar @Praslab.com.
+- **License**: MIT License.
+- **References**: Inspired by the community at [iperf.fr](https://iperf.fr).
+
+---
+
+*Found a bug or want to contribute? Feel free to open a PR on the GitHub repository.*
