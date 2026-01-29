@@ -19,8 +19,8 @@ interface ServerSelectorProps {
     setSelectedServer: (server: PublicServer | null) => void;
     privateHost: string;
     setPrivateHost: (host: string) => void;
-    privatePort: string;
-    setPrivatePort: (port: string) => void;
+    port: string;
+    setPort: (port: string) => void;
     ipVersion: 'ipv4' | 'ipv6';
     setIpVersion: (version: 'ipv4' | 'ipv6') => void;
 }
@@ -32,8 +32,8 @@ const ServerSelector: React.FC<ServerSelectorProps> = ({
     setSelectedServer,
     privateHost,
     setPrivateHost,
-    privatePort,
-    setPrivatePort,
+    port,
+    setPort,
     ipVersion,
     setIpVersion
 }) => {
@@ -109,24 +109,37 @@ const ServerSelector: React.FC<ServerSelectorProps> = ({
                                 <div className="bg-gray-900 p-4 rounded-md">
                                     <div className="grid grid-cols-2 gap-4 text-sm mb-3">
                                         <div><span className="text-gray-500">Host:</span> {selectedServer.hostname}</div>
-                                        <div><span className="text-gray-500">Ports:</span> {selectedServer.ports}</div>
+                                        <div><span className="text-gray-500">Ports Available:</span> {selectedServer.ports}</div>
                                         <div><span className="text-gray-500">Speed:</span> {selectedServer.speed}</div>
                                         <div><span className="text-gray-500">CC:</span> {selectedServer.tcpCongestion}</div>
-                                        <div><span className="text-gray-500">IP:</span> {selectedServer.ipVersion}</div>
                                     </div>
-                                    <div className="flex justify-end">
+
+                                    {/* Editable Port for Public Server */}
+                                    <div className="mt-3">
+                                        <label className="block text-sm text-gray-400 mb-1">Target Port (Required)</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                className="input-field flex-1"
+                                                value={port}
+                                                onChange={(e) => setPort(e.target.value)}
+                                                placeholder="e.g. 5201"
+                                            />
+                                            <span className="text-xs text-gray-500 self-center">
+                                                Manually select a port from availability
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-end mt-2">
                                         <a href={`/api/ping?host=${selectedServer.hostname}`} target="_blank" rel="noreferrer"
                                             className="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-200"
                                             onClick={(e) => {
                                                 e.preventDefault();
-                                                alert(`To ping, use the 'Measure RTT' button below in the BDP Calculator section, or run a test.`);
-                                                // Ideally we link this to BDP calc or show a mini ping modal. 
-                                                // User asked for "ping button is not shown to receive rtt".
-                                                // I will add a mini-action here that sets the BDP host?
-                                                // OR just populate the BDP host when server is selected. (It already does via props?)
+                                                alert(`To ping, use the 'Measure RTT' button below in the BDP Calculator section, or just run the test.`);
                                             }}
                                         >
-                                            Check RTT (Ping)
+                                            Check RTT
                                         </a>
                                     </div>
                                 </div>
@@ -153,8 +166,8 @@ const ServerSelector: React.FC<ServerSelectorProps> = ({
                                 type="text"
                                 className="input-field"
                                 placeholder="5201"
-                                value={privatePort}
-                                onChange={(e) => setPrivatePort(e.target.value)}
+                                value={port}
+                                onChange={(e) => setPort(e.target.value)}
                             />
                         </div>
                         <div>

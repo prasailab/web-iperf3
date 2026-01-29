@@ -9,8 +9,27 @@ function App() {
   const [mode, setMode] = useState<'public' | 'private'>('public');
   const [selectedServer, setSelectedServer] = useState<any>(null);
   const [privateHost, setPrivateHost] = useState('');
-  const [privatePort, setPrivatePort] = useState('');
+  const [port, setPort] = useState('5201'); // Unified port state
   const [ipVersion, setIpVersion] = useState<'ipv4' | 'ipv6'>('ipv4');
+
+  // Auto-fill port when public server changes
+  React.useEffect(() => {
+    if (mode === 'public' && selectedServer) {
+      const portsStr = selectedServer.ports;
+      let defaultPort = '5201';
+
+      if (portsStr.includes('-')) {
+        const [start] = portsStr.split('-').map(Number);
+        defaultPort = start.toString();
+      } else if (portsStr.includes(',')) {
+        const list = portsStr.split(',').map((s: string) => s.trim());
+        defaultPort = list[0];
+      } else {
+        defaultPort = portsStr;
+      }
+      setPort(defaultPort);
+    }
+  }, [selectedServer, mode]);
 
   // Test Config State
   const [protocol, setProtocol] = useState<'tcp' | 'udp'>('tcp');
@@ -39,21 +58,13 @@ function App() {
       return;
     }
 
-    // Port logic
-    let port: number | string | undefined;
-    if (mode === 'private' && privatePort) {
-      port = privatePort;
-    } else if (mode === 'public' && selectedServer) {
-      const portsStr = selectedServer.ports;
-      if (portsStr.includes('-')) {
-        const [start, end] = portsStr.split('-').map(Number);
-        port = Math.floor(Math.random() * (end - start + 1)) + start;
-      } else if (portsStr.includes(',')) {
-        const list = portsStr.split(',').map((s: string) => s.trim());
-        port = list[Math.floor(Math.random() * list.length)];
-      } else {
-        port = parseInt(portsStr);
-      }
+    // Use string port directly (user edited)
+    // Validate number?
+    const portNum = parseInt(port);
+    if (isNaN(portNum)) {
+      setError('Invalid port number');
+      setIsRunning(false);
+      return;
     }
 
     const payload = {
@@ -61,7 +72,7 @@ function App() {
       protocol,
       ipVersion: mode === 'public' && selectedServer?.ipVersion.includes('IPv6') && ipVersion === 'ipv6' ? 'ipv6' : 'ipv4',
       serverHost: host,
-      port,
+      port: portNum,
       duration,
       parallelStreams: protocol === 'tcp' ? streams : undefined,
       reverse: direction === 'reverse',
@@ -160,7 +171,7 @@ function App() {
               mode={mode} setMode={setMode}
               selectedServer={selectedServer} setSelectedServer={setSelectedServer}
               privateHost={privateHost} setPrivateHost={setPrivateHost}
-              privatePort={privatePort} setPrivatePort={setPrivatePort}
+              port={port} setPort={setPort}
               ipVersion={ipVersion} setIpVersion={setIpVersion}
             />
 
