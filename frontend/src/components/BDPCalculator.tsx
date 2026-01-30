@@ -29,7 +29,14 @@ const BDPCalculator: React.FC<BDPCalculatorProps> = ({ currentHost }) => {
         setLoadingPing(true);
         setPingError('');
         try {
-            const res = await fetch(`/api/ping?host=${host}`);
+            const res = await fetch(`/api/ping?host=${encodeURIComponent(host)}`);
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+            const contentType = res.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned non-JSON response');
+            }
             const data = await res.json();
             if (data.error) throw new Error(data.error);
             if (data.rttAvg) setRtt(data.rttAvg);
@@ -50,8 +57,17 @@ const BDPCalculator: React.FC<BDPCalculatorProps> = ({ currentHost }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ bandwidthMbps: Number(bw), rttMs: Number(rtt) })
             });
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
             const data = await res.json();
+            if (data.error) {
+                setPingError(data.error);
+                return;
+            }
             setResult(data);
+        } catch (e: any) {
+            setPingError(e.message || 'Calculation failed');
         } finally {
             setLoadingCalc(false);
         }

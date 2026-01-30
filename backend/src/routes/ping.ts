@@ -25,9 +25,24 @@ router.get('/ping', async (req: Request, res: Response) => {
         }
 
         const result = await runPing(host, ipVersion);
+
+        // Always return JSON, even if there was an error
+        if (result.error) {
+            return res.status(500).json({
+                error: result.error,
+                host: result.host,
+                rttAvg: 0,
+                packetLoss: result.packetLoss
+            });
+        }
+
         res.json(result);
-    } catch (error) {
-        res.status(500).json({ error: 'Internal server error' });
+    } catch (error: any) {
+        res.status(500).json({
+            error: error.message || 'Internal server error',
+            rttAvg: 0,
+            packetLoss: 100
+        });
     }
 });
 
