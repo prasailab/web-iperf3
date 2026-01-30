@@ -7,9 +7,12 @@ export default {
     theme: {
         extend: {
             colors: {
-                primary: '#EBE3CE',  // Light beige/off-white from logo
-                secondary: '#4A1D2F', // Dark burgundy/maroon from logo
-                accent: '#D4AF37',   // Gold/yellow matching logo vibe (if any) or generic gold
+                primary: '#3B82F6', // Blue
+                secondary: '#1F2937', // Dark gray
+                accent: '#D4AF37', // Gold
+            },
+            fontFamily: {
+                sans: ['Inter', 'system-ui', 'sans-serif'],
             },
         },
     },
