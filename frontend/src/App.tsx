@@ -34,8 +34,10 @@ function App() {
       ? selectedServer.hostname
       : privateHost;
 
-    if (!serverHost) {
-      setError('Please select or enter a server');
+    console.log('[Frontend] Test config:', { mode, selectedServer, privateHost, serverHost, port });
+
+    if (!serverHost || serverHost.trim() === '') {
+      setError('Please select or enter a server hostname');
       setRunning(false);
       return;
     }
