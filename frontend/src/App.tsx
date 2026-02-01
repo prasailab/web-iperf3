@@ -157,6 +157,10 @@ function App() {
                 data.error.includes('Connection timed out') ||
                 data.error.includes('Connection refused');
 
+              // Check for non-fatal errors (e.g., partial results from crash)
+              // "unable to receive results" often happens in bidirectional mode crashes but data is captured
+              const isNonFatal = data.error.includes('unable to receive results') && data.output && data.output.length > 50;
+
               if (isConnectionTimeout && mode === 'public' && selectedServer) {
                 // Suggest alternative ports
                 const availablePorts = selectedServer.ports || '5201-5209';
@@ -166,6 +170,9 @@ function App() {
                   `• Port ${port} might be busy or blocked by firewall\n` +
                   `• Try selecting a different public server\n\n` +
                   `Original error: ${data.error}`);
+              } else if (isNonFatal) {
+                console.warn('[Frontend] Suppressing non-fatal error:', data.error);
+                setRawOutput(data.output + '\n\n[Warning] ' + data.error);
               } else {
                 setError(data.error);
               }
