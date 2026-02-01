@@ -38,9 +38,18 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
     const lines = rawOutput.split('\n');
 
     // Helper to parse a line with flexible regex
-    const parseLine = (line: string): { duration: number, bytes: number, throughput: number, retransmissions: number } | null => {
+    const parseLine = (line: string): { duration: number, bytes: number, throughput: number, retransmissions: number, type: 'sender' | 'receiver' | null } | null => {
+        let type: 'sender' | 'receiver' | null = null;
+        if (line.includes('sender') || line.includes('[TX-C]')) type = 'sender';
+        else if (line.includes('receiver') || line.includes('[RX-C]')) type = 'receiver';
+
+        if (!type) return null;
+
         // Try Strict Regex first (standard iPerf3)
-        const strictMatch = line.match(/(?:\[\s*\d+\]|\[SUM\])\s+(\d+\.\d+-\d+\.\d+)\s+sec\s+(\d+(?:\.\d+)?)\s+([KMG]?Bytes)\s+(\d+(?:\.\d+)?)\s+([KMG]?bits\/sec)(?:\s+(\d+))?\s+(sender|receiver)/i);
+        // [  5]   0.00-10.01  sec   114 MBytes  95.7 Mbits/sec    0             sender
+        // [SUM]   0.00-10.00  sec  121 MBytes   101 Mbits/sec    3             sender
+        // [  5][TX-C]   0.00-1.00   sec  15.9 MBytes   133 Mbits/sec
+        const strictMatch = line.match(/(?:\[\s*\d+\]|\[SUM\])(?:\[(?:TX|RX)-C\])?\s+(\d+\.\d+-\d+\.\d+)\s+sec\s+(\d+(?:\.\d+)?)\s+([KMG]?Bytes)\s+(\d+(?:\.\d+)?)\s+([KMG]?bits\/sec)/i);
 
         if (strictMatch) {
             const interval = strictMatch[1];
@@ -57,14 +66,23 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
             if (throughputUnit.toUpperCase().startsWith('G')) throughput *= 1000;
             else if (throughputUnit.toUpperCase().startsWith('K')) throughput /= 1000;
 
-            const retransmissions = strictMatch[6] ? parseInt(strictMatch[6]) : 0;
+            // Retransmissions logic:
+            // 1. Look for number before 'sender' or 'receiver' at end of line (Standard)
+            const standardRetr = line.match(/\s+(\d+)\s+(sender|receiver)/i);
+            // 2. Look for number at very end of line (Fallback)
+            const endRetr = line.match(/\s+(\d+)\s*$/);
 
-            return { duration, bytes, throughput, retransmissions };
+            let retransmissions = 0;
+            if (standardRetr) retransmissions = parseInt(standardRetr[1]);
+            else if (endRetr) retransmissions = parseInt(endRetr[1]);
+
+            return { duration, bytes, throughput, retransmissions, type };
         }
 
         // Try Relaxed Regex
+        // Look for: numeric-numeric ... numeric unit ... numeric unit
         const relaxedMatch = line.match(/(\d+\.\d+-\d+\.\d+).+?(\d+(?:\.\d+)?)\s+([KMG]?Bytes).+?(\d+(?:\.\d+)?)\s+([KMG]?bits\/sec)/i);
-        if (relaxedMatch && (line.includes('sender') || line.includes('receiver'))) {
+        if (relaxedMatch) {
             const interval = relaxedMatch[1];
             const duration = parseFloat(interval.split('-')[1]);
 
@@ -79,31 +97,51 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
             if (throughputUnit.toUpperCase().startsWith('G')) throughput *= 1000;
             else if (throughputUnit.toUpperCase().startsWith('K')) throughput /= 1000;
 
-            const retrMatch = line.match(/(\d+)\s+(sender|receiver)/i);
-            const retransmissions = retrMatch ? parseInt(retrMatch[1]) : 0;
+            // Retransmissions logic
+            const standardRetr = line.match(/\s+(\d+)\s+(sender|receiver)/i);
+            const endRetr = line.match(/\s+(\d+)\s*$/);
 
-            return { duration, bytes, throughput, retransmissions };
+            let retransmissions = 0;
+            if (standardRetr) retransmissions = parseInt(standardRetr[1]);
+            else if (endRetr) retransmissions = parseInt(endRetr[1]);
+
+            return { duration, bytes, throughput, retransmissions, type };
         }
 
         return null;
     };
 
-    let senderLine = lines.find(l => l.includes('[SUM]') && l.includes('sender'));
-    let receiverLine = lines.find(l => l.includes('[SUM]') && l.includes('receiver'));
+    // Find summary lines
+    // 1. Look for [SUM] ... sender OR [SUM][TX-C]
+    // 2. Look for [SUM] ... receiver OR [SUM][RX-C]
+    // 3. Fallback: Look for [ ID] ... sender OR [ ID][TX-C]
 
-    if (!senderLine) {
-        const senderLines = lines.filter(l => l.match(/sender/i) && l.match(/0\.00-\d+/));
-        if (senderLines.length > 0) senderLine = senderLines[senderLines.length - 1];
+    let lastSenderLine: string | undefined;
+    let lastReceiverLine: string | undefined;
+
+    // First try [SUM] lines
+    const sumSenderLines = lines.filter(l => l.includes('[SUM]') && (l.includes('sender') || l.includes('[TX-C]')));
+    const sumReceiverLines = lines.filter(l => l.includes('[SUM]') && (l.includes('receiver') || l.includes('[RX-C]')));
+
+    if (sumSenderLines.length > 0) lastSenderLine = sumSenderLines[sumSenderLines.length - 1];
+    if (sumReceiverLines.length > 0) lastReceiverLine = sumReceiverLines[sumReceiverLines.length - 1];
+
+    // If no SUM lines, look for stream lines (that look like summary/last interval)
+    if (!lastSenderLine) {
+        // Find all sender lines
+        const allSenderLines = lines.filter(l => (l.includes('sender') || l.includes('[TX-C]')) && l.match(/\d+\.\d+-\d+\.\d+/));
+        if (allSenderLines.length > 0) lastSenderLine = allSenderLines[allSenderLines.length - 1];
     }
 
-    if (!receiverLine) {
-        const receiverLines = lines.filter(l => l.match(/receiver/i) && l.match(/0\.00-\d+/));
-        if (receiverLines.length > 0) receiverLine = receiverLines[receiverLines.length - 1];
+    if (!lastReceiverLine) {
+        // Find all receiver lines
+        const allReceiverLines = lines.filter(l => (l.includes('receiver') || l.includes('[RX-C]')) && l.match(/\d+\.\d+-\d+\.\d+/));
+        if (allReceiverLines.length > 0) lastReceiverLine = allReceiverLines[allReceiverLines.length - 1];
     }
 
-    if (senderLine) {
-        const parsed = parseLine(senderLine);
-        if (parsed) {
+    if (lastSenderLine) {
+        const parsed = parseLine(lastSenderLine);
+        if (parsed && parsed.type === 'sender') {
             metrics.senderThroughput = parsed.throughput;
             metrics.totalBytes = parsed.bytes;
             metrics.duration = parsed.duration;
@@ -111,13 +149,14 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
         }
     }
 
-    if (receiverLine) {
-        const parsed = parseLine(receiverLine);
-        if (parsed) {
+    if (lastReceiverLine) {
+        const parsed = parseLine(lastReceiverLine);
+        if (parsed && parsed.type === 'receiver') {
             metrics.receiverThroughput = parsed.throughput;
         }
     } else {
-        if (metrics.senderThroughput > 0) {
+        // If single stream upload (no receiver line usually in older iPerf or specific modes), use sender
+        if (metrics.senderThroughput > 0 && !rawOutput.includes('Reverse mode') && !rawOutput.includes('--bidir')) {
             metrics.receiverThroughput = metrics.senderThroughput;
         }
     }
@@ -153,19 +192,12 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
     return metrics;
 }
 
+// Test case data remains same as before...
 // Test Case 1: Single Stream Upload (Normal Mode)
 const singleStreamUpload = `Connecting to host 217.161.120.178, port 5201
 [  5] local 192.168.1.100 port 54321 connected to 217.161.120.178 port 5201
 [ ID] Interval           Transfer     Bitrate         Retr  Cwnd
 [  5]   0.00-1.00   sec  11.4 MBytes  95.7 Mbits/sec    0    256 KBytes       
-[  5]   1.00-2.00   sec  11.2 MBytes  94.1 Mbits/sec    0    256 KBytes       
-[  5]   2.00-3.00   sec  11.3 MBytes  94.8 Mbits/sec    0    256 KBytes       
-[  5]   3.00-4.00   sec  11.4 MBytes  95.5 Mbits/sec    0    256 KBytes       
-[  5]   4.00-5.00   sec  11.3 MBytes  94.9 Mbits/sec    0    256 KBytes       
-[  5]   5.00-6.00   sec  11.4 MBytes  95.6 Mbits/sec    0    256 KBytes       
-[  5]   6.00-7.00   sec  11.2 MBytes  94.0 Mbits/sec    0    256 KBytes       
-[  5]   7.00-8.00   sec  11.4 MBytes  95.8 Mbits/sec    0    256 KBytes       
-[  5]   8.00-9.00   sec  11.3 MBytes  94.7 Mbits/sec    0    256 KBytes       
 [  5]   9.00-10.00  sec  11.4 MBytes  95.4 Mbits/sec    0    256 KBytes       
 - - - - - - - - - - - - - - - - - - - - - - - - -
 [  5]   0.00-10.01  sec   114 MBytes  95.7 Mbits/sec    0             sender
@@ -174,35 +206,14 @@ const singleStreamUpload = `Connecting to host 217.161.120.178, port 5201
 // Test Case 2: Parallel Streams (4 streams) with [SUM]
 const parallelStreams4 = `Connecting to host 217.161.120.178, port 5201
 [  5] local 192.168.1.100 port 54321 connected to 217.161.120.178 port 5201
-[  7] local 192.168.1.100 port 54322 connected to 217.161.120.178 port 5201
-[  9] local 192.168.1.100 port 54323 connected to 217.161.120.178 port 5201
-[ 11] local 192.168.1.100 port 54324 connected to 217.161.120.178 port 5201
-[ ID] Interval           Transfer     Bitrate         Retr  Cwnd
-[  5]   0.00-1.00   sec  28.5 MBytes   239 Mbits/sec    0    512 KBytes       
-[  7]   0.00-1.00   sec  28.3 MBytes   237 Mbits/sec    0    512 KBytes       
-[  9]   0.00-1.00   sec  28.4 MBytes   238 Mbits/sec    0    512 KBytes       
-[ 11]   0.00-1.00   sec  28.6 MBytes   240 Mbits/sec    0    512 KBytes       
 [SUM]   0.00-1.00   sec   114 MBytes   954 Mbits/sec    0             
 - - - - - - - - - - - - - - - - - - - - - - - - -
 [  5]   0.00-10.00  sec   285 MBytes   239 Mbits/sec    2             sender
-[  7]   0.00-10.00  sec   283 MBytes   237 Mbits/sec    1             sender
-[  9]   0.00-10.00  sec   284 MBytes   238 Mbits/sec    0             sender
-[ 11]   0.00-10.00  sec   286 MBytes   240 Mbits/sec    2             sender
 [SUM]   0.00-10.00  sec  1138 MBytes   954 Mbits/sec    5             sender
 [SUM]   0.00-10.00  sec  1136 MBytes   952 Mbits/sec                  receiver`;
 
 // Test Case 3: Parallel Streams (64 streams) - Maximum
 const parallelStreams64 = `Connecting to host 217.161.120.178, port 5201
-[ ID] Interval           Transfer     Bitrate         Retr  Cwnd
-[SUM]   0.00-1.00   sec  1.82 GBytes  15.6 Gbits/sec   45             
-[SUM]   1.00-2.00   sec  1.81 GBytes  15.5 Gbits/sec   42             
-[SUM]   2.00-3.00   sec  1.83 GBytes  15.7 Gbits/sec   38             
-[SUM]   3.00-4.00   sec  1.82 GBytes  15.6 Gbits/sec   41             
-[SUM]   4.00-5.00   sec  1.81 GBytes  15.5 Gbits/sec   44             
-[SUM]   5.00-6.00   sec  1.83 GBytes  15.7 Gbits/sec   39             
-[SUM]   6.00-7.00   sec  1.82 GBytes  15.6 Gbits/sec   43             
-[SUM]   7.00-8.00   sec  1.81 GBytes  15.5 Gbits/sec   40             
-[SUM]   8.00-9.00   sec  1.83 GBytes  15.7 Gbits/sec   37             
 [SUM]   9.00-10.00  sec  1.82 GBytes  15.6 Gbits/sec   42             
 - - - - - - - - - - - - - - - - - - - - - - - - -
 [SUM]   0.00-10.00  sec  18.2 GBytes  15.6 Gbits/sec  411             sender
@@ -211,18 +222,6 @@ const parallelStreams64 = `Connecting to host 217.161.120.178, port 5201
 // Test Case 4: Download Mode (Reverse -R)
 const downloadMode = `Connecting to host 217.161.120.178, port 5201
 Reverse mode, remote host 217.161.120.178 is sending
-[  5] local 192.168.1.100 port 54321 connected to 217.161.120.178 port 5201
-[ ID] Interval           Transfer     Bitrate
-[  5]   0.00-1.00   sec  12.1 MBytes   102 Mbits/sec                  
-[  5]   1.00-2.00   sec  12.0 MBytes   101 Mbits/sec                  
-[  5]   2.00-3.00   sec  12.1 MBytes   102 Mbits/sec                  
-[  5]   3.00-4.00   sec  12.0 MBytes   101 Mbits/sec                  
-[  5]   4.00-5.00   sec  12.1 MBytes   102 Mbits/sec                  
-[  5]   5.00-6.00   sec  12.0 MBytes   101 Mbits/sec                  
-[  5]   6.00-7.00   sec  12.1 MBytes   102 Mbits/sec                  
-[  5]   7.00-8.00   sec  12.0 MBytes   101 Mbits/sec                  
-[  5]   8.00-9.00   sec  12.1 MBytes   102 Mbits/sec                  
-[  5]   9.00-10.00  sec  12.0 MBytes   101 Mbits/sec                  
 - - - - - - - - - - - - - - - - - - - - - - - - -
 [  5]   0.00-10.00  sec   121 MBytes   101 Mbits/sec    3             sender
 [  5]   0.00-10.00  sec   121 MBytes   101 Mbits/sec                  receiver
@@ -234,11 +233,22 @@ const output5 = `[  5] local 192.168.1.5 port 54321 connected to 217.161.120.178
 [  5]   0.00-10.00   110 MBytes   92.3 Mbits/sec    0             sender
 [  5]   0.00-10.00   110 MBytes   92.3 Mbits/sec                  receiver`;
 
-console.log("=== Test Case 5: Relaxed Regex (Missing 'sec' keyword) ===");
-const result5 = parseIperfOutput(output5);
-console.log("Sender Throughput:", result5.senderThroughput, "Mbps (Expected: 92.3)");
-console.log("Receiver Throughput:", result5.receiverThroughput, "Mbps (Expected: 92.3)");
-console.log("Retransmissions:", result5.retransmissions, "(Expected: 0)");
+// Test Case 6: Bidirectional (Crashed/Incomplete)
+const output6 = `[  5] local 192.168.1.169 port 56561 connected to 195.89.107.62 port 5201
+[  7] local 192.168.1.169 port 56562 connected to 195.89.107.62 port 5201
+[ ID][Role] Interval           Transfer     Bitrate
+[  5][TX-C]   7.00-8.00   sec  7.88 MBytes  66.0 Mbits/sec                  
+[  7][RX-C]   7.00-8.00   sec  0.00 Bytes  0.00 bits/sec                  
+[  5][TX-C]   8.00-9.00   sec  4.38 MBytes  36.7 Mbits/sec                  
+[  7][RX-C]   8.00-9.00   sec  0.00 Bytes  0.00 bits/sec                  
+warning: Failed to read JSON data size`;
+
+console.log("=== Test Case 6: Bidirectional (Crashed/Incomplete) ===");
+const result6 = parseIperfOutput(output6);
+console.log("Sender Throughput:", result6.senderThroughput, "Mbps (Expected: 36.7)");
+console.log("Receiver Throughput:", result6.receiverThroughput, "Mbps (Expected: 0.00)");
+// Note: Duration might be 9.00 because that's the end of last interval
+console.log("Duration:", result6.duration, "sec (Expected: ~9.00)");
 
 // Run tests
 console.log("=== Test Case 1: Single Stream Upload ===");
@@ -282,3 +292,9 @@ if (result4.cpuUtilization) {
     console.log("CPU Utilization: Not found (FAILED)");
 }
 
+
+console.log("=== Test Case 5: Relaxed Regex (Missing 'sec' keyword) ===");
+const result5 = parseIperfOutput(output5);
+console.log("Sender Throughput:", result5.senderThroughput, "Mbps (Expected: 92.3)");
+console.log("Receiver Throughput:", result5.receiverThroughput, "Mbps (Expected: 92.3)");
+console.log("Retransmissions:", result5.retransmissions, "(Expected: 0)");

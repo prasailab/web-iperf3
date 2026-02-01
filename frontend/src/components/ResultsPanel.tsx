@@ -56,11 +56,18 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
     const lines = rawOutput.split('\n');
 
     // Helper to parse a line with flexible regex
-    const parseLine = (line: string): { duration: number, bytes: number, throughput: number, retransmissions: number } | null => {
+    const parseLine = (line: string): { duration: number, bytes: number, throughput: number, retransmissions: number, type: 'sender' | 'receiver' | null } | null => {
+        let type: 'sender' | 'receiver' | null = null;
+        if (line.includes('sender') || line.includes('[TX-C]')) type = 'sender';
+        else if (line.includes('receiver') || line.includes('[RX-C]')) type = 'receiver';
+
+        if (!type) return null;
+
         // Try Strict Regex first (standard iPerf3)
         // [  5]   0.00-10.01  sec   114 MBytes  95.7 Mbits/sec    0             sender
         // [SUM]   0.00-10.00  sec  121 MBytes   101 Mbits/sec    3             sender
-        const strictMatch = line.match(/(?:\[\s*\d+\]|\[SUM\])\s+(\d+\.\d+-\d+\.\d+)\s+sec\s+(\d+(?:\.\d+)?)\s+([KMG]?Bytes)\s+(\d+(?:\.\d+)?)\s+([KMG]?bits\/sec)(?:\s+(\d+))?\s+(sender|receiver)/i);
+        // [  5][TX-C]   0.00-1.00   sec  15.9 MBytes   133 Mbits/sec
+        const strictMatch = line.match(/(?:\[\s*\d+\]|\[SUM\])(?:\[(?:TX|RX)-C\])?\s+(\d+\.\d+-\d+\.\d+)\s+sec\s+(\d+(?:\.\d+)?)\s+([KMG]?Bytes)\s+(\d+(?:\.\d+)?)\s+([KMG]?bits\/sec)/i);
 
         if (strictMatch) {
             const interval = strictMatch[1];
@@ -77,16 +84,24 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
             if (throughputUnit.toUpperCase().startsWith('G')) throughput *= 1000;
             else if (throughputUnit.toUpperCase().startsWith('K')) throughput /= 1000;
 
-            const retransmissions = strictMatch[6] ? parseInt(strictMatch[6]) : 0;
+            // Retransmissions logic:
+            // 1. Look for number before 'sender' or 'receiver' at end of line (Standard)
+            const standardRetr = line.match(/\s+(\d+)\s+(sender|receiver)/i);
+            // 2. Look for number at very end of line (Fallback)
+            const endRetr = line.match(/\s+(\d+)\s*$/);
+
+            let retransmissions = 0;
+            if (standardRetr) retransmissions = parseInt(standardRetr[1]);
+            else if (endRetr) retransmissions = parseInt(endRetr[1]);
 
             console.log('[Parser] Strict match success:', line);
-            return { duration, bytes, throughput, retransmissions };
+            return { duration, bytes, throughput, retransmissions, type };
         }
 
-        // Try Relaxed Regex (handles variations in spacing or missing units)
-        // Look for: numeric-numeric ... numeric unit ... numeric unit ... sender/receiver
+        // Try Relaxed Regex
+        // Look for: numeric-numeric ... numeric unit ... numeric unit
         const relaxedMatch = line.match(/(\d+\.\d+-\d+\.\d+).+?(\d+(?:\.\d+)?)\s+([KMG]?Bytes).+?(\d+(?:\.\d+)?)\s+([KMG]?bits\/sec)/i);
-        if (relaxedMatch && (line.includes('sender') || line.includes('receiver'))) {
+        if (relaxedMatch) {
             const interval = relaxedMatch[1];
             const duration = parseFloat(interval.split('-')[1]);
 
@@ -101,61 +116,73 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
             if (throughputUnit.toUpperCase().startsWith('G')) throughput *= 1000;
             else if (throughputUnit.toUpperCase().startsWith('K')) throughput /= 1000;
 
-            // Try to find retransmissions (integer before sender/receiver)
-            const retrMatch = line.match(/(\d+)\s+(sender|receiver)/i);
-            const retransmissions = retrMatch ? parseInt(retrMatch[1]) : 0;
+            // Retransmissions logic
+            const standardRetr = line.match(/\s+(\d+)\s+(sender|receiver)/i);
+            const endRetr = line.match(/\s+(\d+)\s*$/);
+
+            let retransmissions = 0;
+            if (standardRetr) retransmissions = parseInt(standardRetr[1]);
+            else if (endRetr) retransmissions = parseInt(endRetr[1]);
 
             console.log('[Parser] Relaxed match success:', line);
-            return { duration, bytes, throughput, retransmissions };
+            return { duration, bytes, throughput, retransmissions, type };
         }
 
         return null;
     };
 
     // Find summary lines
-    // 1. Look for [SUM] ... sender
-    // 2. Look for [SUM] ... receiver
-    // 3. Fallback: Look for [ ID] ... sender (if no SUM)
+    // 1. Look for [SUM] ... sender OR [SUM][TX-C]
+    // 2. Look for [SUM] ... receiver OR [SUM][RX-C]
+    // 3. Fallback: Look for [ ID] ... sender OR [ ID][TX-C]
 
-    let senderLine = lines.find(l => l.includes('[SUM]') && l.includes('sender'));
-    let receiverLine = lines.find(l => l.includes('[SUM]') && l.includes('receiver'));
+    let lastSenderLine: string | undefined;
+    let lastReceiverLine: string | undefined;
 
-    if (!senderLine) {
-        // Fallback to single stream (last sender line)
-        // Filter lines that have 'sender' and resemble a summary (0.00-duration)
-        const senderLines = lines.filter(l => l.match(/sender/i) && l.match(/0\.00-\d+/));
-        if (senderLines.length > 0) senderLine = senderLines[senderLines.length - 1];
+    // First try [SUM] lines
+    const sumSenderLines = lines.filter(l => l.includes('[SUM]') && (l.includes('sender') || l.includes('[TX-C]')));
+    const sumReceiverLines = lines.filter(l => l.includes('[SUM]') && (l.includes('receiver') || l.includes('[RX-C]')));
+
+    if (sumSenderLines.length > 0) lastSenderLine = sumSenderLines[sumSenderLines.length - 1];
+    if (sumReceiverLines.length > 0) lastReceiverLine = sumReceiverLines[sumReceiverLines.length - 1];
+
+    // If no SUM lines, look for stream lines (that look like summary/last interval)
+    if (!lastSenderLine) {
+        // Find all sender lines
+        const allSenderLines = lines.filter(l => (l.includes('sender') || l.includes('[TX-C]')) && l.match(/\d+\.\d+-\d+\.\d+/));
+        if (allSenderLines.length > 0) lastSenderLine = allSenderLines[allSenderLines.length - 1];
     }
 
-    if (!receiverLine) {
-        const receiverLines = lines.filter(l => l.match(/receiver/i) && l.match(/0\.00-\d+/));
-        if (receiverLines.length > 0) receiverLine = receiverLines[receiverLines.length - 1];
+    if (!lastReceiverLine) {
+        // Find all receiver lines
+        const allReceiverLines = lines.filter(l => (l.includes('receiver') || l.includes('[RX-C]')) && l.match(/\d+\.\d+-\d+\.\d+/));
+        if (allReceiverLines.length > 0) lastReceiverLine = allReceiverLines[allReceiverLines.length - 1];
     }
 
-    if (senderLine) {
-        const parsed = parseLine(senderLine);
-        if (parsed) {
+    if (lastSenderLine) {
+        const parsed = parseLine(lastSenderLine);
+        if (parsed && parsed.type === 'sender') {
             metrics.senderThroughput = parsed.throughput;
             metrics.totalBytes = parsed.bytes;
             metrics.duration = parsed.duration;
             metrics.retransmissions = parsed.retransmissions;
             console.log('[PDF Parser] Sender parsed:', metrics.senderThroughput, 'Mbps');
         } else {
-            console.warn('[Parser] Failed to parse sender line:', senderLine);
+            console.warn('[Parser] Failed to parse sender line:', lastSenderLine);
         }
     }
 
-    if (receiverLine) {
-        const parsed = parseLine(receiverLine);
-        if (parsed) {
+    if (lastReceiverLine) {
+        const parsed = parseLine(lastReceiverLine);
+        if (parsed && parsed.type === 'receiver') {
             metrics.receiverThroughput = parsed.throughput;
             console.log('[PDF Parser] Receiver parsed:', metrics.receiverThroughput, 'Mbps');
         } else {
-            console.warn('[Parser] Failed to parse receiver line:', receiverLine);
+            console.warn('[Parser] Failed to parse receiver line:', lastReceiverLine);
         }
     } else {
         // If single stream upload (no receiver line usually in older iPerf or specific modes), use sender
-        if (metrics.senderThroughput > 0) {
+        if (metrics.senderThroughput > 0 && !rawOutput.includes('Reverse mode') && !rawOutput.includes('--bidir')) {
             metrics.receiverThroughput = metrics.senderThroughput;
         }
     }
@@ -166,13 +193,28 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
         metrics.mss = parseInt(mssMatch[1]);
         metrics.mtu = metrics.mss + 40;
     } else {
-        // Default Ethernet MTU
         metrics.mtu = 1500;
         metrics.mss = 1460;
     }
 
+    // Parse TCP Window Size (Output header)
+    // Example: TCP window size: 85.3 KByte (default)
+    const windowMatch = rawOutput.match(/TCP window size:\s+([\d.]+)\s+([KMG]?Byte)/i);
+    if (windowMatch) {
+        let size = parseFloat(windowMatch[1]);
+        const unit = windowMatch[2];
+        if (unit.toLowerCase().startsWith('g')) size *= 1024 * 1024 * 1024;
+        else if (unit.toLowerCase().startsWith('m')) size *= 1024 * 1024;
+        else if (unit.toLowerCase().startsWith('k')) size *= 1024;
+        metrics.windowSize = size;
+    }
+
+    // Calculate retransmission rate
+    if (metrics.duration > 0) {
+        metrics.retransmitRate = metrics.retransmissions / metrics.duration;
+    }
+
     // Parse CPU Utilization
-    // Example: CPU Utilization: local/sender 3.8% (0.6%u/3.2%s), remote/receiver 0.7% (0.1%u/0.7%s)
     const cpuMatch = rawOutput.match(/CPU Utilization: local\/sender ([\d.]+)%.*remote\/receiver ([\d.]+)%/i);
     if (cpuMatch) {
         // Detailed parsing can be added if needed, extracting just totals for now
@@ -198,23 +240,6 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
                 remoteSystem: 0
             };
         }
-    }
-
-    // Parse TCP Window Size (Output header)
-    // Example: TCP window size: 85.3 KByte (default)
-    const windowMatch = rawOutput.match(/TCP window size:\s+([\d.]+)\s+([KMG]?Byte)/i);
-    if (windowMatch) {
-        let size = parseFloat(windowMatch[1]);
-        const unit = windowMatch[2];
-        if (unit.toLowerCase().startsWith('g')) size *= 1024 * 1024 * 1024;
-        else if (unit.toLowerCase().startsWith('m')) size *= 1024 * 1024;
-        else if (unit.toLowerCase().startsWith('k')) size *= 1024;
-        metrics.windowSize = size;
-    }
-
-    // Calculate retransmission rate
-    if (metrics.duration > 0) {
-        metrics.retransmitRate = metrics.retransmissions / metrics.duration;
     }
 
     return metrics;
