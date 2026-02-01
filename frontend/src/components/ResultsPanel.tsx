@@ -18,6 +18,9 @@ interface ParsedMetrics {
     duration: number;
     rtt?: number;
     cwnd?: number;
+    mtu?: number;  // Path MTU
+    mss?: number;  // Maximum Segment Size
+    retransmitRate?: number;  // Retransmissions per second
 }
 
 function parseIperfOutput(rawOutput: string): ParsedMetrics {
@@ -65,6 +68,24 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
     const durationMatch = rawOutput.match(/0\.00-([\d.]+)\s+sec/);
     if (durationMatch) {
         metrics.duration = parseFloat(durationMatch[1]);
+    }
+
+    // Extract MTU/MSS if present in output
+    // iPerf3 may show: "local ... port ... connected to ... port ... (MSS=1460)"
+    const mssMatch = rawOutput.match(/MSS=(\d+)/);
+    if (mssMatch) {
+        metrics.mss = parseInt(mssMatch[1]);
+        // MTU = MSS + TCP header (20) + IP header (20)
+        metrics.mtu = metrics.mss + 40;
+    } else {
+        // Default Ethernet MTU
+        metrics.mtu = 1500;
+        metrics.mss = 1460;
+    }
+
+    // Calculate retransmission rate
+    if (metrics.duration > 0) {
+        metrics.retransmitRate = metrics.retransmissions / metrics.duration;
     }
 
     return metrics;
@@ -227,7 +248,10 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ results, error, rawOutput, 
                 ["Metric", "Value", "Description"],
                 ["Upload Throughput", `${parsed.senderThroughput.toFixed(2)} Mbps`, "Sender bandwidth"],
                 ["Download Throughput", `${parsed.receiverThroughput.toFixed(2)} Mbps`, "Receiver bandwidth"],
-                ["Retransmissions", `${parsed.retransmissions}`, "Packets retransmitted"],
+                ["Path MTU", `${parsed.mtu || 1500} bytes`, "Maximum Transmission Unit"],
+                ["MSS", `${parsed.mss || 1460} bytes`, "Maximum Segment Size"],
+                ["Retransmissions", `${parsed.retransmissions}`, "Total packets retransmitted"],
+                ["Retransmit Rate", `${(parsed.retransmitRate || 0).toFixed(2)}/sec`, "Retransmissions per second"],
                 ["Round-Trip Time (Est.)", `${rfc6349.estimatedRTT} ms`, "Network latency"],
                 ["Bottleneck Bandwidth (Est.)", `${rfc6349.estimatedBandwidth} Mbps`, "Available bandwidth"]
             ];
