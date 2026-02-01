@@ -34,8 +34,6 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
 
     if (!rawOutput) return metrics;
 
-    console.log('[PDF Parser] Parsing output, length:', rawOutput.length);
-
     // Parse sender line - flexible regex for actual iPerf3 format
     // Example: [  5]   0.00-10.01  sec   114 MBytes  95.7 Mbits/sec    0             sender
     const senderMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*([\d.]+)\s+sec\s+([\d.]+)\s+([KMG]?)Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+(\d+)\s+sender/i);
@@ -281,10 +279,12 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ results, error, rawOutput, 
             doc.text("Primary Metrics", 14, yPos);
             yPos += 5;
 
+            // Use the maximum throughput value (handles both normal and reverse mode)
+            const throughput = Math.max(parsed.senderThroughput, parsed.receiverThroughput);
+
             const primaryData = [
                 ["Metric", "Value", "Description"],
-                ["Upload Throughput", `${parsed.senderThroughput.toFixed(2)} Mbps`, "Sender bandwidth"],
-                ["Download Throughput", `${parsed.receiverThroughput.toFixed(2)} Mbps`, "Receiver bandwidth"],
+                ["Throughput", `${throughput.toFixed(2)} Mbps`, "Test throughput"],
                 ["Path MTU", `${parsed.mtu || 1500} bytes`, "Maximum Transmission Unit"],
                 ["MSS", `${parsed.mss || 1460} bytes`, "Maximum Segment Size"],
                 ["Retransmissions", `${parsed.retransmissions}`, "Total packets retransmitted"],
