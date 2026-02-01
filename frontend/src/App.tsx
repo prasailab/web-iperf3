@@ -272,7 +272,7 @@ function App() {
           {/* Right Column: BDP Calculator */}
           <div>
             <BDPCalculator
-              currentHost={mode === 'public' && selectedServer ? selectedServer.host : privateHost}
+              currentHost={mode === 'public' && selectedServer ? selectedServer.hostname : privateHost}
             />
           </div>
         </div>
