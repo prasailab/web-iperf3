@@ -34,9 +34,19 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
 
     if (!rawOutput) return metrics;
 
-    // Parse sender line - flexible regex for actual iPerf3 format
+    // For parallel streams (-P > 1), look for [SUM] lines
+    // Example: [SUM]   0.00-10.00  sec   456 MBytes   383 Mbits/sec    5             sender
+    const sumSenderMatch = rawOutput.match(/\[SUM\]\s+[\d.]+\s*-\s*([\d.]+)\s+sec\s+([\d.]+)\s+([KMG]?)Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+(\d+)\s+sender/i);
+    const sumReceiverMatch = rawOutput.match(/\[SUM\]\s+[\d.]+\s*-\s*[\d.]+\s+sec\s+[\d.]+\s+[KMG]?Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+receiver/i);
+
+    // For single stream, look for regular lines with stream ID
     // Example: [  5]   0.00-10.01  sec   114 MBytes  95.7 Mbits/sec    0             sender
-    const senderMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*([\d.]+)\s+sec\s+([\d.]+)\s+([KMG]?)Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+(\d+)\s+sender/i);
+    const singleSenderMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*([\d.]+)\s+sec\s+([\d.]+)\s+([KMG]?)Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+(\d+)\s+sender/i);
+    const singleReceiverMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*[\d.]+\s+sec\s+[\d.]+\s+[KMG]?Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+receiver/i);
+
+    // Prefer [SUM] if available (parallel streams), otherwise use single stream
+    const senderMatch = sumSenderMatch || singleSenderMatch;
+    const receiverMatch = sumReceiverMatch || singleReceiverMatch;
 
     if (senderMatch) {
         // Duration from interval
@@ -59,13 +69,7 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
 
         // Retransmissions
         metrics.retransmissions = parseInt(senderMatch[6]);
-
-        console.log('[PDF Parser] Sender parsed:', metrics.senderThroughput, 'Mbps');
     }
-
-    // Parse receiver line
-    // Example: [  5]   0.00-10.01  sec   114 MBytes  95.5 Mbits/sec                  receiver
-    const receiverMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*[\d.]+\s+sec\s+[\d.]+\s+[KMG]?Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+receiver/i);
 
     if (receiverMatch) {
         let throughput = parseFloat(receiverMatch[1]);
@@ -73,20 +77,16 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
         if (unit === 'G') throughput *= 1000;
         else if (unit === 'K') throughput /= 1000;
         metrics.receiverThroughput = throughput;
-        console.log('[PDF Parser] Receiver parsed:', throughput, 'Mbps');
     } else {
         metrics.receiverThroughput = metrics.senderThroughput;
     }
 
-    // Extract MTU/MSS if present in output
-    // iPerf3 may show: "local ... port ... connected to ... port ... (MSS=1460)"
-    const mssMatch = rawOutput.match(/MSS=(\d+)/);
+    // Extract MTU/MSS if present
+    const mssMatch = rawOutput.match(/MSS[=\s]+(\d+)/i);
     if (mssMatch) {
         metrics.mss = parseInt(mssMatch[1]);
-        // MTU = MSS + TCP header (20) + IP header (20)
         metrics.mtu = metrics.mss + 40;
     } else {
-        // Default Ethernet MTU
         metrics.mtu = 1500;
         metrics.mss = 1460;
     }
@@ -279,12 +279,10 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ results, error, rawOutput, 
             doc.text("Primary Metrics", 14, yPos);
             yPos += 5;
 
-            // Use the maximum throughput value (handles both normal and reverse mode)
-            const throughput = Math.max(parsed.senderThroughput, parsed.receiverThroughput);
-
             const primaryData = [
                 ["Metric", "Value", "Description"],
-                ["Throughput", `${throughput.toFixed(2)} Mbps`, "Test throughput"],
+                ["Upload Throughput", `${parsed.senderThroughput.toFixed(2)} Mbps`, "Sender bandwidth"],
+                ["Download Throughput", `${parsed.receiverThroughput.toFixed(2)} Mbps`, "Receiver bandwidth"],
                 ["Path MTU", `${parsed.mtu || 1500} bytes`, "Maximum Transmission Unit"],
                 ["MSS", `${parsed.mss || 1460} bytes`, "Maximum Segment Size"],
                 ["Retransmissions", `${parsed.retransmissions}`, "Total packets retransmitted"],
