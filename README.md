@@ -104,6 +104,16 @@ Docker handles all the setup automatically. This is the easiest way to run the t
 docker-compose up --build
 ```
 
+### 4. Troubleshooting
+
+**Windows: npm execution error**
+If you see an error like `cannot be loaded because running scripts is disabled on this system` when running `npm install`, you need to allow local scripts to run.
+Open PowerShell and run:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+Then try running `npm install` again.
+
 ---
 
 ## iPerf3 Usage Guide
