@@ -1,68 +1,75 @@
 # Web-based iPerf3 Tool
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Build](https://img.shields.io/badge/build-docker--ready-orange.svg)
-![Visibility](https://img.shields.io/badge/visibility-public-brightgreen.svg)
-
-A modern, full-stack web application for running network performance tests using **iperf3**. This tool is now **Publicly Available** and provides a clean, responsive web interface to run TCP/UDP throughput tests against public or private servers, measure Round-Trip Time (RTT), and calculate Bandwidth-Delay Product (BDP) for network tuning.
+A modern, simple web application for running network performance tests using **iperf3**. This tool is now **Publicly Available** and provides a clean, easy-to-use web interface to run connection speed tests, measure latency (delay), and calculate network tuning parameters (Bandwidth-Delay Product).
 
 ---
 
-## 🚀 Overview
+## Overview
 
-This package is an Open Source project designed to simplify network testing. It wraps the powerful `iperf3` command-line utility in a professional, user-friendly web dashboard. Whether you are a network engineer, a sysadmin, or a curious developer, you can download, integrate, and deploy this tool in minutes to perform throughput audits without the complexity of terminal-only clients.
+This project is an Open Source tool designed to make network testing easy. It uses a popular command-line tool called `iperf3` but wraps it in a professional website. Whether you are a network engineer, a system administrator, or just checking your connection, you can use this tool to functionality test your network speed without needing to type complex commands in a terminal.
 
-### 🌟 Why use Web iPerf3 Tool?
-- **Universal Accessibility**: Run tests from any device with a browser.
-- **Easy Integration**: Small footprint, perfect for adding to internal toolkits or monitoring dashboards.
-- **Ready for Everyone**: No complex configuration required to get started with the Docker version.
+### Why use Web iPerf3 Tool?
+- **Universal Accessibility**: Run tests from any device (phone, laptop, tablet) using just a web browser.
+- **Easy Integration**: It is small and easy to add to your existing tools.
+- **Ready for Everyone**: Simple to set up and use.
 
 ### Key Features
 
-- **🌐 Public & Private Server Support**: 
-  - Integrated dropdown for popular public iPerf3 servers (data sourced from iperf.fr).
-  - Manual connection to any private server endpoint.
-- **⚡ Real-time Streaming**:
-  - Live progress updates using chunked transfer encoding (the output updates line-by-line as the test runs).
-- **🛠️ Advanced Test Configuration**: 
-  - Switch between **TCP** (reliability) and **UDP** (jitter/packet loss).
-  - Support for **Reverse Mode** (Server -> Client) and **Bidirectional** testing.
-  - Granular control over duration, parallel streams, and target bitrate.
-- **📏 BDP Calculator & Tuning**: 
-  - Calculate **Bandwidth-Delay Product** and recommended TCP Receive Window sizes based on **RFC 6349**.
-  - Built-in Ping tool to accurately measure RTT before calculating.
-- **🎨 Premium UI**: 
-  - Dark-mode optimized dashboard built with React, TypeScript, and Tailwind CSS.
-- **🐳 Containerized**: 
-  - Fully Docker-ready for consistent cross-platform deployment.
+- **Public & Private Server Support**: 
+  - Select from a list of popular public servers.
+  - Connect to your own private server by entering its IP address.
+- **Real-time Results**:
+  - See the test results update live on your screen as the test runs.
+- **Advanced Test Configuration**: 
+  - Switch between **TCP** (standard speed test) and **UDP** (for testing data loss and jitter).
+  - Support for **Reverse Mode** (Server sending data to you) and **Bidirectional** testing.
+  - Control how long the test runs and how much data is sent.
+- **Network Tuning Calculator**: 
+  - Calculate "Bandwidth-Delay Product" (BDP) to optimize your network settings for high speed.
+  - Built-in Ping tool to measure the delay to a server.
+- **Premium Design**: 
+  - A modern, dark-mode optimized interface that looks professional.
+- **Docker Support**: 
+  - Easily run the application using Docker containers.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
-- **Frontend**: React (Vite), TypeScript, Tailwind CSS, Lucide Icons.
-- **Backend**: Node.js, Express, TypeScript, Zod (Validation).
-- **Core Native Tools**: `iperf3`, `ping` (iputils).
+This project is built using modern web technologies:
+
+- **Frontend (The User Interface)**:
+  - **React**: A library for building user interfaces.
+  - **TypeScript**: A strongly typed version of JavaScript for better code quality.
+  - **Tailwind CSS**: A tool for styling the website.
+  - **Lucide Icons**: A clean icon set.
+
+- **Backend (The Server logic)**:
+  - **Node.js**: A runtime for executing JavaScript on the server.
+  - **Express**: A web framework for Node.js.
+  - **Zod**: A tool for validating data.
+
+- **Core Tools**:
+  - **iperf3**: The underlying tool used for network speed testing.
+  - **ping**: A utility to test connectivity and latency.
 
 ---
 
-## 📦 Installation Guide (Cross-Platform)
+## Installation Guide (Cross-Platform)
 
-The application depends on `iperf3` being installed on the system where the **backend** is running.
+The application requires `iperf3` to be installed on the machine where the **backend** is running.
 
 ### 1. Prerequisites (iPerf3 Installation)
 
-| Platform | Command / Download |
-| :--- | :--- |
-| **Windows** | `winget install ar51an.iPerf3` or download from [iperf.fr](https://iperf.fr/iperf-download.php#windows) |
-| **macOS** | `brew install iperf3` |
-| **Linux (Debian/Ubuntu)** | `sudo apt update && sudo apt install iperf3 iputils-ping` |
-| **Linux (RHEL/CentOS)** | `sudo yum install iperf3` |
+- **Windows**: Install using `winget install ar51an.iPerf3` or download from iperf.fr.
+- **macOS**: Install using `brew install iperf3`.
+- **Linux (Debian/Ubuntu)**: Install using `sudo apt update && sudo apt install iperf3 iputils-ping`.
+- **Linux (RHEL/CentOS)**: Install using `sudo yum install iperf3`.
 
-### 2. Standard Setup (Node.js)
+### 2. Standard Setup
 
-1.  **Clone the Repository**:
+1.  **Download the Code**:
+    Clone the repository using git:
     ```bash
     git clone https://github.com/prasailab/web-iperf3.git
     cd web-iperf3
@@ -87,11 +94,11 @@ The application depends on `iperf3` being installed on the system where the **ba
     cd ../backend
     npm start
     ```
-    *The app will be accessible at `http://localhost:3000`.*
+    The app will be accessible at `http://localhost:3000`.
 
 ### 3. Docker Setup (Recommended)
 
-Docker handles all dependencies (Node, iperf3, ping) automatically.
+Docker handles all the setup automatically. This is the easiest way to run the tool.
 
 ```bash
 docker-compose up --build
@@ -99,66 +106,66 @@ docker-compose up --build
 
 ---
 
-## 📖 iPerf3 Usage Guide
+## iPerf3 Usage Guide
 
-This application exposes core iPerf3 functionality. For a deeper dive into the command-line flags, refer to the [official iperf.fr documentation](https://iperf.fr/iperf-doc.php).
+This application uses iPerf3 to run tests. Here is a simple explanation of the settings you can change:
 
-### Common Flags Explained
+### Settings Explained
 
-- **`-p` (Port)**: The port the server is listening on. Default is `5201`.
-- **`-u` (UDP)**: Swaps from standard TCP to UDP testing. Useful for measuring packet loss and jitter.
-- **`-b` (Bandwidth)**: Crucial for UDP. Unlike TCP, UDP is not "self-throttling". You must specify a target bitrate (e.g., `10M` for 10Mbits/sec).
-- **`-R` (Reverse)**: By default, the client sends data to the server (Upload). Reverse mode makes the server send data to the client (Download).
-- **`-P` (Parallel)**: Opens multiple simultaneous connections. This is often necessary to saturate high-speed links (e.g., 10Gbps).
-- **`-t` (Time)**: Duration of the test in seconds. Default is `10`.
+- **Port**: The communication channel the server is listening on. Default is `5201`.
+- **UDP Mode**: Switches from standard data transfer (TCP) to a mode used for streaming (UDP). Use this to check for data loss.
+- **Bandwidth**: When using UDP, you must set a target speed (e.g., `10M` for 10 Megabits/sec).
+- **Reverse Mode**: By default, you send data to the server (Upload). Reverse mode makes the server send data to you (Download).
+- **Parallel Streams**: Opens multiple connections at once. This helps achieve higher speeds on very fast networks (like 10Gbps).
+- **Time**: How long the test runs in seconds. Default is `10`.
 
 ### Best Practices
 
-1.  **TCP vs UDP**: Use TCP to check real-world throughput. Use UDP to check for network stability (jitter/loss) at a specific speed.
-2.  **Reverse Mode**: Always test both directions. ISP speeds are often asymmetrical.
-3.  **Parallel Streams**: If you aren't seeing the speeds you expect on a high-speed link, try increasing streams to 4 or 8.
+1.  **TCP vs UDP**: Use TCP to check your maximum speed. Use UDP to check connection quality/stability.
+2.  **Reverse Mode**: Always test both upload (default) and download (Reverse) speeds, as they are often different.
+3.  **Parallel Streams**: If your speed result is lower than expected on a fast connection, try increasing the streams to 4 or 8.
 
 ---
 
-## 🎛️ Usage Instructions
+## Usage Instructions
 
 ### Running a Test
-1.  **Server Selection**: Toggle between **Public** (select from list) or **Private** (enter IP).
-2.  **Configuration**: Choose your protocol and direction. If testing high-speed fiber, use multiple streams.
-3.  **Run**: Click **Start iPerf3 Test**. The live output will appear in the results panel.
+1.  **Server Selection**: Choose **Public** to pick a server from the list, or **Private** to type in an IP address.
+2.  **Configuration**: Select your options (Protocol, streams, duration).
+3.  **Run**: Click the **Start** button. The results will appear on the screen.
 
-### BDP Calculation
-1.  Enter the hostname in the BDP Calculator section.
-2.  Click **Measure RTT** to get a real-time ping result.
-3.  Enter your "Bottleneck Bandwidth" (e.g., 1000 for 1Gbps).
-4.  The tool will automatically calculate the required **TCP Window Size** to maximize that specific link.
+### Network Tuning (BDP)
+1.  Enter the server address in the BDP Calculator section.
+2.  Click **Measure RTT** to check the delay.
+3.  Enter your link speed (e.g., 1000 for 1Gbps).
+4.  The tool will tell you the best **TCP Window Size** setting to use for full speed.
 
 ---
 
-## 🤝 Contributing & Integration
+## Contributing & Integration
 
-Since this project is now **Public**, contributions are welcome! 
+Since this project is **Public**, contributions are welcome! 
 
 ### How to Integrate
-- **As a Standalone Service**: Run the Docker container on your network to provide a speed-test portal for your users.
-- **Embedded in Your App**: The backend provides a simple JSON/Streaming API. You can point your own frontend to our `/api/run-iperf-stream` endpoint.
-- **Microservice**: Use the BDP calculation endpoint `/api/calculate-bdp` as a standalone utility for your network automation scripts.
+- **As a Standalone Service**: Run the Docker container on your network for users to test their speed.
+- **Embedded in Your App**: You can use the backend API to run tests from your own custom applications.
+- **Microservice**: Use the BDP calculator as a utility for your own scripts.
 
 ### How to Contribute
-1.  **Fork** the repository.
-2.  **Create a feature branch** (`git checkout -b feature/cool-new-metric`).
-3.  **Commit your changes** (`git commit -m 'Add support for iPerf2 servers'`).
-4.  **Push to the branch** (`git push origin feature/cool-new-metric`).
-5.  **Open a Pull Request**.
+1.  **Fork** the repository (Make your own copy).
+2.  **Create a branch** for your new feature.
+3.  **Commit your changes**.
+4.  **Push** your changes to your copy.
+5.  **Open a Pull Request** to share your changes with us.
 
 ---
 
-## 📄 License & Attribution
+## License & Attribution
 
 - **Copyright**: (c) 2026 Prasath Suthagar @Praslab.com.
-- **License**: MIT License - Feel free to use, modify, and distribute!
-- **References**: Inspired by the community at [iperf.fr](https://iperf.fr).
+- **License**: MIT License - Free to use, modify, and distribute!
+- **References**: Inspired by the community at `iperf.fr`.
 
 ---
 
-*Found a bug or want to contribute? Feel free to open a PR or Issue on the GitHub repository.*
+*Found a bug? Feel free to report it on the GitHub repository.*
