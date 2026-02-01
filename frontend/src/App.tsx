@@ -155,7 +155,8 @@ function App() {
               // Check if it's a connection timeout error
               const isConnectionTimeout = data.error.includes('unable to connect') ||
                 data.error.includes('Connection timed out') ||
-                data.error.includes('Connection refused');
+                data.error.includes('Connection refused') ||
+                data.error.includes('Connection reset');
 
               // Check if it's a generic exit code error and we have logs
               // "Exited with code 1" isn't helpful to show in red if we have logs.
@@ -168,12 +169,17 @@ function App() {
               if (isConnectionTimeout && mode === 'public' && selectedServer) {
                 // Suggest alternative ports
                 const availablePorts = selectedServer.ports || '5201-5209';
-                setError(`Connection failed to ${serverHost}:${port}\n\n` +
+                let suggestionMsg = `Connection failed to ${serverHost}:${port}\n\n` +
                   `💡 Suggestions:\n` +
                   `• Try a different port from available: ${availablePorts}\n` +
                   `• Port ${port} might be busy or blocked by firewall\n` +
-                  `• Try selecting a different public server\n\n` +
-                  `Original error: ${data.error}`);
+                  `• Try selecting a different public server\n`;
+
+                if (customArgs.includes('-w')) {
+                  suggestionMsg += `• ⚠️ Public servers often reject custom TCP Window sizes (-w). Try removing it.\n`;
+                }
+
+                setError(suggestionMsg + `\nOriginal error: ${data.error}`);
               } else if (isNonFatal) {
                 console.warn('[Frontend] Suppressing non-fatal error:', data.error);
                 setRawOutput(prev => prev + '\n\n[Warning] Test finished: ' + data.error);

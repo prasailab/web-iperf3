@@ -131,7 +131,9 @@ const TestConfigForm: React.FC<TestConfigProps> = ({
                     onChange={(e) => setCustomArgs(e.target.value)}
                     placeholder="e.g. -V -d"
                 />
-                <p className="text-xs text-gray-500 mt-1">Appended to iperf3 command. Only safe flags allowed.</p>
+                <p className="text-xs text-gray-500 mt-1">
+                    Appended to iperf3 command. <span className="text-yellow-500">Note: Public servers often reject <code>-w</code> (TCP Window).</span>
+                </p>
             </div>
 
             <div className="mt-6">
