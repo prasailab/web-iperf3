@@ -34,40 +34,50 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
 
     if (!rawOutput) return metrics;
 
-    // Parse sender line: [  5]   0.00-10.00  sec  100 MBytes  83.9 Mbits/sec    0             sender
-    const senderMatch = rawOutput.match(/sec\s+([\d.]+)\s+([KMG])Bytes\s+([\d.]+)\s+([KMG])bits\/sec\s+(\d+)\s+sender/);
-    if (senderMatch) {
-        let throughput = parseFloat(senderMatch[3]);
-        const unit = senderMatch[4];
-        if (unit === 'G') throughput *= 1000;
-        if (unit === 'K') throughput /= 1000;
-        metrics.senderThroughput = throughput;
-        metrics.retransmissions = parseInt(senderMatch[5]);
+    console.log('[PDF Parser] Parsing output, length:', rawOutput.length);
 
-        let bytes = parseFloat(senderMatch[1]);
-        const byteUnit = senderMatch[2];
+    // Parse sender line - flexible regex for actual iPerf3 format
+    // Example: [  5]   0.00-10.01  sec   114 MBytes  95.7 Mbits/sec    0             sender
+    const senderMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*([\d.]+)\s+sec\s+([\d.]+)\s+([KMG]?)Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+(\d+)\s+sender/i);
+
+    if (senderMatch) {
+        // Duration from interval
+        metrics.duration = parseFloat(senderMatch[1]);
+
+        // Total bytes
+        let bytes = parseFloat(senderMatch[2]);
+        const byteUnit = senderMatch[3];
         if (byteUnit === 'G') bytes *= 1024 * 1024 * 1024;
         else if (byteUnit === 'M') bytes *= 1024 * 1024;
         else if (byteUnit === 'K') bytes *= 1024;
         metrics.totalBytes = bytes;
+
+        // Throughput
+        let throughput = parseFloat(senderMatch[4]);
+        const throughputUnit = senderMatch[5];
+        if (throughputUnit === 'G') throughput *= 1000;
+        else if (throughputUnit === 'K') throughput /= 1000;
+        metrics.senderThroughput = throughput;
+
+        // Retransmissions
+        metrics.retransmissions = parseInt(senderMatch[6]);
+
+        console.log('[PDF Parser] Sender parsed:', metrics.senderThroughput, 'Mbps');
     }
 
     // Parse receiver line
-    const receiverMatch = rawOutput.match(/sec\s+([\d.]+)\s+([KMG])Bytes\s+([\d.]+)\s+([KMG])bits\/sec\s+receiver/);
+    // Example: [  5]   0.00-10.01  sec   114 MBytes  95.5 Mbits/sec                  receiver
+    const receiverMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*[\d.]+\s+sec\s+[\d.]+\s+[KMG]?Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+receiver/i);
+
     if (receiverMatch) {
-        let throughput = parseFloat(receiverMatch[3]);
-        const unit = receiverMatch[4];
+        let throughput = parseFloat(receiverMatch[1]);
+        const unit = receiverMatch[2];
         if (unit === 'G') throughput *= 1000;
-        if (unit === 'K') throughput /= 1000;
+        else if (unit === 'K') throughput /= 1000;
         metrics.receiverThroughput = throughput;
+        console.log('[PDF Parser] Receiver parsed:', throughput, 'Mbps');
     } else {
         metrics.receiverThroughput = metrics.senderThroughput;
-    }
-
-    // Try to extract duration
-    const durationMatch = rawOutput.match(/0\.00-([\d.]+)\s+sec/);
-    if (durationMatch) {
-        metrics.duration = parseFloat(durationMatch[1]);
     }
 
     // Extract MTU/MSS if present in output
