@@ -21,10 +21,23 @@ router.get('/ping', async (req, res) => {
             return res.status(400).json({ error: 'Invalid host format' });
         }
         const result = await (0, pingRunner_1.runPing)(host, ipVersion);
+        // Always return JSON, even if there was an error
+        if (result.error) {
+            return res.status(500).json({
+                error: result.error,
+                host: result.host,
+                rttAvg: 0,
+                packetLoss: result.packetLoss
+            });
+        }
         res.json(result);
     }
     catch (error) {
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({
+            error: error.message || 'Internal server error',
+            rttAvg: 0,
+            packetLoss: 100
+        });
     }
 });
 exports.default = router;

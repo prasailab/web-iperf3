@@ -43,7 +43,7 @@ app.post('/api/calculate-bdp', (req, res) => {
 if (process.env.NODE_ENV === 'production' || process.argv.includes('--production')) {
     const frontendPath = path_1.default.join(__dirname, '../../frontend/dist');
     app.use(express_1.default.static(frontendPath));
-    app.get('*', (req, res) => {
+    app.get(/(.*)/, (req, res) => {
         res.sendFile(path_1.default.join(frontendPath, 'index.html'));
     });
 }

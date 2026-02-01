@@ -114,6 +114,12 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 Then try running `npm install` again.
 
+**Docker: error during connect (Windows)**
+If you see `error during connect: ... open //./pipe/dockerDesktopLinuxEngine ...`, it means Docker Desktop is not running.
+1. Download and install [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+2. **Start Docker Desktop** from your Start menu and wait for the engine to start (the whale icon in the taskbar will stop animating).
+3. Try running `docker-compose up --build` again.
+
 ---
 
 ## iPerf3 Usage Guide
