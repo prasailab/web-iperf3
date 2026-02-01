@@ -205,7 +205,13 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <header className="text-center py-8">
+        <header className="text-center py-8 flex flex-col items-center justify-center">
+          {/* Logo */}
+          <img
+            src="/logo.jpg"
+            alt="Praslab Logo"
+            className="h-24 w-24 object-cover rounded-full mb-6 border-4 border-secondary shadow-lg hover:rotate-12 transition-transform duration-500"
+          />
           <h1 className="text-5xl font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
             Praslab Network Test
           </h1>

@@ -77,16 +77,6 @@ const TestConfigForm: React.FC<TestConfigProps> = ({
                             />
                             <span>Download (Server &rarr; Client)</span>
                         </label>
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                                type="radio"
-                                name="direction"
-                                checked={direction === 'bidirectional'}
-                                onChange={() => setDirection('bidirectional')}
-                                className="form-radio text-primary"
-                            />
-                            <span>Bi-directional</span>
-                        </label>
                     </div>
                 </div>
 
