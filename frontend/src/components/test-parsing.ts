@@ -35,47 +35,94 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
 
     if (!rawOutput) return metrics;
 
-    // For parallel streams (-P > 1), look for [SUM] lines
-    const sumSenderMatch = rawOutput.match(/\[SUM\]\s+[\d.]+\s*-\s*([\d.]+)\s+sec\s+([\d.]+)\s+([KMG]?)Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+(\d+)\s+sender/i);
-    const sumReceiverMatch = rawOutput.match(/\[SUM\]\s+[\d.]+\s*-\s*[\d.]+\s+sec\s+[\d.]+\s+[KMG]?Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+receiver/i);
+    const lines = rawOutput.split('\n');
 
-    // For single stream, look for regular lines with stream ID
-    const singleSenderMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*([\d.]+)\s+sec\s+([\d.]+)\s+([KMG]?)Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+(\d+)\s+sender/i);
-    const singleReceiverMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*[\d.]+\s+sec\s+[\d.]+\s+[KMG]?Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+receiver/i);
+    // Helper to parse a line with flexible regex
+    const parseLine = (line: string): { duration: number, bytes: number, throughput: number, retransmissions: number } | null => {
+        // Try Strict Regex first (standard iPerf3)
+        const strictMatch = line.match(/(?:\[\s*\d+\]|\[SUM\])\s+(\d+\.\d+-\d+\.\d+)\s+sec\s+(\d+(?:\.\d+)?)\s+([KMG]?Bytes)\s+(\d+(?:\.\d+)?)\s+([KMG]?bits\/sec)(?:\s+(\d+))?\s+(sender|receiver)/i);
 
-    // Prefer [SUM] if available (parallel streams), otherwise use single stream
-    const senderMatch = sumSenderMatch || singleSenderMatch;
-    const receiverMatch = sumReceiverMatch || singleReceiverMatch;
+        if (strictMatch) {
+            const interval = strictMatch[1];
+            const duration = parseFloat(interval.split('-')[1]);
 
-    if (senderMatch) {
-        metrics.duration = parseFloat(senderMatch[1]);
+            let bytes = parseFloat(strictMatch[2]);
+            const byteUnit = strictMatch[3];
+            if (byteUnit.toUpperCase().startsWith('G')) bytes *= 1024 * 1024 * 1024;
+            else if (byteUnit.toUpperCase().startsWith('M')) bytes *= 1024 * 1024;
+            else if (byteUnit.toUpperCase().startsWith('K')) bytes *= 1024;
 
-        let bytes = parseFloat(senderMatch[2]);
-        const byteUnit = senderMatch[3];
-        if (byteUnit === 'G') bytes *= 1024 * 1024 * 1024;
-        else if (byteUnit === 'M') bytes *= 1024 * 1024;
-        else if (byteUnit === 'K') bytes *= 1024;
-        metrics.totalBytes = bytes;
+            let throughput = parseFloat(strictMatch[4]);
+            const throughputUnit = strictMatch[5];
+            if (throughputUnit.toUpperCase().startsWith('G')) throughput *= 1000;
+            else if (throughputUnit.toUpperCase().startsWith('K')) throughput /= 1000;
 
-        let throughput = parseFloat(senderMatch[4]);
-        const throughputUnit = senderMatch[5];
-        if (throughputUnit === 'G') throughput *= 1000;
-        else if (throughputUnit === 'K') throughput /= 1000;
-        metrics.senderThroughput = throughput;
+            const retransmissions = strictMatch[6] ? parseInt(strictMatch[6]) : 0;
 
-        metrics.retransmissions = parseInt(senderMatch[6]);
+            return { duration, bytes, throughput, retransmissions };
+        }
+
+        // Try Relaxed Regex
+        const relaxedMatch = line.match(/(\d+\.\d+-\d+\.\d+).+?(\d+(?:\.\d+)?)\s+([KMG]?Bytes).+?(\d+(?:\.\d+)?)\s+([KMG]?bits\/sec)/i);
+        if (relaxedMatch && (line.includes('sender') || line.includes('receiver'))) {
+            const interval = relaxedMatch[1];
+            const duration = parseFloat(interval.split('-')[1]);
+
+            let bytes = parseFloat(relaxedMatch[2]);
+            const byteUnit = relaxedMatch[3];
+            if (byteUnit.toUpperCase().startsWith('G')) bytes *= 1024 * 1024 * 1024;
+            else if (byteUnit.toUpperCase().startsWith('M')) bytes *= 1024 * 1024;
+            else if (byteUnit.toUpperCase().startsWith('K')) bytes *= 1024;
+
+            let throughput = parseFloat(relaxedMatch[4]);
+            const throughputUnit = relaxedMatch[5];
+            if (throughputUnit.toUpperCase().startsWith('G')) throughput *= 1000;
+            else if (throughputUnit.toUpperCase().startsWith('K')) throughput /= 1000;
+
+            const retrMatch = line.match(/(\d+)\s+(sender|receiver)/i);
+            const retransmissions = retrMatch ? parseInt(retrMatch[1]) : 0;
+
+            return { duration, bytes, throughput, retransmissions };
+        }
+
+        return null;
+    };
+
+    let senderLine = lines.find(l => l.includes('[SUM]') && l.includes('sender'));
+    let receiverLine = lines.find(l => l.includes('[SUM]') && l.includes('receiver'));
+
+    if (!senderLine) {
+        const senderLines = lines.filter(l => l.match(/sender/i) && l.match(/0\.00-\d+/));
+        if (senderLines.length > 0) senderLine = senderLines[senderLines.length - 1];
     }
 
-    if (receiverMatch) {
-        let throughput = parseFloat(receiverMatch[1]);
-        const unit = receiverMatch[2];
-        if (unit === 'G') throughput *= 1000;
-        else if (unit === 'K') throughput /= 1000;
-        metrics.receiverThroughput = throughput;
+    if (!receiverLine) {
+        const receiverLines = lines.filter(l => l.match(/receiver/i) && l.match(/0\.00-\d+/));
+        if (receiverLines.length > 0) receiverLine = receiverLines[receiverLines.length - 1];
+    }
+
+    if (senderLine) {
+        const parsed = parseLine(senderLine);
+        if (parsed) {
+            metrics.senderThroughput = parsed.throughput;
+            metrics.totalBytes = parsed.bytes;
+            metrics.duration = parsed.duration;
+            metrics.retransmissions = parsed.retransmissions;
+        }
+    }
+
+    if (receiverLine) {
+        const parsed = parseLine(receiverLine);
+        if (parsed) {
+            metrics.receiverThroughput = parsed.throughput;
+        }
     } else {
-        metrics.receiverThroughput = metrics.senderThroughput;
+        if (metrics.senderThroughput > 0) {
+            metrics.receiverThroughput = metrics.senderThroughput;
+        }
     }
 
+    // Parse MTU/MSS
     const mssMatch = rawOutput.match(/MSS[=\s]+(\d+)/i);
     if (mssMatch) {
         metrics.mss = parseInt(mssMatch[1]);
@@ -85,12 +132,12 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
         metrics.mss = 1460;
     }
 
+    // Calculate retransmission rate
     if (metrics.duration > 0) {
         metrics.retransmitRate = metrics.retransmissions / metrics.duration;
     }
 
     // Parse CPU Utilization
-    // Example: CPU Utilization: local/sender 3.8% (0.6%u/3.2%s), remote/receiver 0.7% (0.1%u/0.7%s)
     const cpuMatch = rawOutput.match(/CPU Utilization: local\/sender ([\d.]+)%.*remote\/receiver ([\d.]+)%/i);
     if (cpuMatch) {
         metrics.cpuUtilization = {
@@ -180,6 +227,18 @@ Reverse mode, remote host 217.161.120.178 is sending
 [  5]   0.00-10.00  sec   121 MBytes   101 Mbits/sec    3             sender
 [  5]   0.00-10.00  sec   121 MBytes   101 Mbits/sec                  receiver
 CPU Utilization: local/sender 3.8% (0.6%u/3.2%s), remote/receiver 0.7% (0.1%u/0.7%s)`;
+
+// Test Case 5: Relaxed Regex (Missing 'sec' or extra spaces)
+const output5 = `[  5] local 192.168.1.5 port 54321 connected to 217.161.120.178 port 5201
+[ ID] Interval           Transfer     Bitrate         Retr
+[  5]   0.00-10.00   110 MBytes   92.3 Mbits/sec    0             sender
+[  5]   0.00-10.00   110 MBytes   92.3 Mbits/sec                  receiver`;
+
+console.log("=== Test Case 5: Relaxed Regex (Missing 'sec' keyword) ===");
+const result5 = parseIperfOutput(output5);
+console.log("Sender Throughput:", result5.senderThroughput, "Mbps (Expected: 92.3)");
+console.log("Receiver Throughput:", result5.receiverThroughput, "Mbps (Expected: 92.3)");
+console.log("Retransmissions:", result5.retransmissions, "(Expected: 0)");
 
 // Run tests
 console.log("=== Test Case 1: Single Stream Upload ===");
