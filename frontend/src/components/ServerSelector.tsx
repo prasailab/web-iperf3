@@ -52,7 +52,10 @@ const ServerSelector: React.FC<ServerSelectorProps> = ({
                 .then(data => {
                     setServers(data);
                     if (data.length > 0 && !selectedServer) {
-                        setSelectedServer(data[0]);
+                        const first = data[0];
+                        setSelectedServer(first);
+                        const defaultPort = first.ports.match(/\d+/)?.[0] || '5201';
+                        setPort(defaultPort);
                     }
                 })
                 .catch(err => {
@@ -95,7 +98,11 @@ const ServerSelector: React.FC<ServerSelectorProps> = ({
                                 value={selectedServer?.hostname || ''}
                                 onChange={(e) => {
                                     const s = servers.find(s => s.hostname === e.target.value);
-                                    if (s) setSelectedServer(s);
+                                    if (s) {
+                                        setSelectedServer(s);
+                                        const defaultPort = s.ports.match(/\d+/)?.[0] || '5201';
+                                        setPort(defaultPort);
+                                    }
                                 }}
                             >
                                 {servers.map((s) => (
