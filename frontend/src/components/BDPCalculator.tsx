@@ -73,6 +73,10 @@ const BDPCalculator: React.FC<BDPCalculatorProps> = ({ currentHost }) => {
         }
     };
 
+    // Derived metric: Max throughput with standard 64KB window
+    // Tput = Window / RTT
+    const maxTput64k = rtt ? ((64 * 1024 * 8) / (Number(rtt) / 1000)) / 1000000 : 0;
+
     return (
         <div className="card border-l-4 border-l-accent">
             <h2 className="text-xl font-semibold mb-2 text-accent">BDP & TCP Throughput Calculator</h2>
@@ -80,7 +84,8 @@ const BDPCalculator: React.FC<BDPCalculatorProps> = ({ currentHost }) => {
                 Calculate Bandwidth-Delay Product to tune TCP window sizes. Ref: <a href="https://www.rfc-editor.org/rfc/rfc6349.html" target="_blank" className="text-blue-400 hover:underline">RFC 6349</a>.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Changed from grid to vertical stack for full width */}
+            <div className="space-y-6">
                 <div className="space-y-4">
                     {/* Host Input */}
                     <div>
@@ -100,7 +105,7 @@ const BDPCalculator: React.FC<BDPCalculatorProps> = ({ currentHost }) => {
                         <div className="flex space-x-2">
                             <input
                                 type="number"
-                                className="input-field"
+                                className="input-field flex-1"
                                 value={rtt}
                                 onChange={(e) => setRtt(parseFloat(e.target.value))}
                                 placeholder="e.g. 50"
@@ -142,24 +147,57 @@ const BDPCalculator: React.FC<BDPCalculatorProps> = ({ currentHost }) => {
                     </button>
                 </div>
 
+                {/* Results Section - Full Width */}
                 <div className="bg-gray-900 rounded p-4 flex flex-col justify-center">
                     {!result ? (
-                        <div className="text-center text-gray-500">
+                        <div className="text-center text-gray-500 py-4">
                             Results will appear here
                         </div>
                     ) : (
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                <span className="text-gray-400">BDP (Bits)</span>
-                                <span className="font-mono text-white">{result.bdpBits.toLocaleString()}</span>
+                        <div className="space-y-4 text-sm">
+                            <h3 className="font-semibold text-gray-300 border-b border-gray-700 pb-1">Calculation Results</h3>
+
+                            {/* BDP */}
+                            <div className="flex justify-between items-start">
+                                <span className="text-gray-400">BDP</span>
+                                <div className="text-right">
+                                    <div className="font-mono text-white text-lg font-bold">
+                                        {(result.bdpBits / 8 / 1024 / 1024).toFixed(2)} MByte
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                        {(result.bdpBits / 1000000).toFixed(2)} Mbits
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                                <span className="text-gray-400">TCP Window Size (KB)</span>
-                                <span className="font-mono text-secondary font-bold text-lg">{(result.rwndBytes / 1024).toFixed(2)} KB</span>
+
+                            {/* Required Window */}
+                            <div className="flex justify-between items-center border-t border-gray-800 pt-2">
+                                <span className="text-gray-400">Required TCP Window</span>
+                                <div className="text-right">
+                                    <span className="font-mono text-secondary font-bold text-lg">
+                                        {(result.rwndBytes / 1024).toFixed(1)} KByte
+                                    </span>
+                                </div>
                             </div>
-                            <div className="flex justify-between items-center pt-2">
-                                <span className="text-gray-400">Max Theoretical Throughput</span>
-                                <span className="font-mono text-primary font-bold">{result.theoreticalThroughputMbps} Mbps</span>
+
+                            {/* Standard Window Perf */}
+                            <div className="flex justify-between items-center border-t border-gray-800 pt-2">
+                                <span className="text-gray-400">Max tput with 64KB Window</span>
+                                <div className="text-right">
+                                    <span className="font-mono text-yellow-400 font-bold">
+                                        {maxTput64k.toFixed(2)} Mbps
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Theoretical Max */}
+                            <div className="flex justify-between items-center border-t border-gray-800 pt-2">
+                                <span className="text-gray-400">Theoretical Link Max</span>
+                                <div className="text-right">
+                                    <span className="font-mono text-primary font-bold">
+                                        {result.theoreticalThroughputMbps} Mbps
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     )}
