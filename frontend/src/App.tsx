@@ -31,7 +31,7 @@ function App() {
     setError('');
 
     const serverHost = mode === 'public' && selectedServer
-      ? selectedServer.host
+      ? selectedServer.hostname
       : privateHost;
 
     if (!serverHost) {
