@@ -162,11 +162,33 @@ function calculateRFC6349Metrics(parsed: ParsedMetrics, estimatedRTT: number = 5
 const ResultsPanel: React.FC<ResultsPanelProps> = ({ results, error, rawOutput, isRunning }) => {
     if (!results && !error && !rawOutput && !isRunning) return null;
 
-    const generatePDF = () => {
+    const generatePDF = async () => {
         try {
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.width;
             let yPos = 20;
+
+            // ========== LOGO ==========
+            try {
+                // Load logo from public folder
+                const logoImg = new Image();
+                logoImg.src = '/logo.jpg';
+                await new Promise((resolve, reject) => {
+                    logoImg.onload = resolve;
+                    logoImg.onerror = reject;
+                    // Timeout after 2 seconds
+                    setTimeout(reject, 2000);
+                });
+
+                // Add logo to PDF (centered, 30x30)
+                const logoWidth = 30;
+                const logoHeight = 30;
+                doc.addImage(logoImg, 'JPEG', (pageWidth - logoWidth) / 2, yPos - 5, logoWidth, logoHeight);
+                yPos += 30;
+            } catch (err) {
+                console.log('Logo not loaded, continuing without it');
+                // Continue without logo if it fails to load
+            }
 
             // ========== HEADER ==========
             doc.setFontSize(20);
