@@ -5,6 +5,7 @@ import bodyParser from 'body-parser';
 import publicServersRouter from './routes/publicServers';
 import iperfRouter from './routes/iperf';
 import pingRouter from './routes/ping';
+import pollRouter from './routes/poll';
 import { calculateBDP } from './services/bdpCalculator';
 import path from 'path';
 
@@ -28,6 +29,7 @@ app.use((req, res, next) => {
 app.use('/api', publicServersRouter);
 app.use('/api', iperfRouter);
 app.use('/api', pingRouter);
+app.use('/api', pollRouter);
 
 // BDP Calculation Endpoint
 app.post('/api/calculate-bdp', (req, res) => {

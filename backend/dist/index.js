@@ -10,6 +10,7 @@ const body_parser_1 = __importDefault(require("body-parser"));
 const publicServers_1 = __importDefault(require("./routes/publicServers"));
 const iperf_1 = __importDefault(require("./routes/iperf"));
 const ping_1 = __importDefault(require("./routes/ping"));
+const poll_1 = __importDefault(require("./routes/poll"));
 const bdpCalculator_1 = require("./services/bdpCalculator");
 const path_1 = __importDefault(require("path"));
 const app = (0, express_1.default)();
@@ -29,6 +30,7 @@ app.use((req, res, next) => {
 app.use('/api', publicServers_1.default);
 app.use('/api', iperf_1.default);
 app.use('/api', ping_1.default);
+app.use('/api', poll_1.default);
 // BDP Calculation Endpoint
 app.post('/api/calculate-bdp', (req, res) => {
     const { bandwidthMbps, rttMs } = req.body;

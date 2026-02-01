@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { runIperf, runIperfStream, IperfOptions } from '../services/iperfRunner';
+import { generateSessionId, createSession, appendOutput, completeSession } from '../services/sessionManager';
 import { z } from 'zod';
 
 const router = Router();
@@ -50,46 +51,37 @@ router.post('/run-iperf-stream', async (req: Request, res: Response) => {
             return;
         }
 
-        // Set headers for streaming text
-        // Disable Nginx/Proxy buffering if any
-        res.setHeader('X-Accel-Buffering', 'no');
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Transfer-Encoding', 'chunked');
-        res.flushHeaders(); // Explicitly flush headers
+        // Generate session ID
+        const sessionId = generateSessionId();
+        createSession(sessionId);
 
-        console.log('[API] Initializing stream via runIperfStream...');
+        console.log(`[API] Created session ${sessionId}`);
 
-        // Import is now top-level (see below), but we use the imported function
-        const stream = runIperfStream(options);
+        // Return session ID immediately
+        res.json({ sessionId });
 
-        // Send checking message immediately
-        res.write('DEBUG: Stream initialized on server...\n');
+        // Start iPerf test in background
+        const stream = runIperfStream(options as IperfOptions);
 
         stream.on('data', (data: string) => {
-            res.write(data);
+            appendOutput(sessionId, data);
         });
 
         stream.on('error', (err: string) => {
             console.error('[API] Stream error:', err);
-            res.write(`\nERROR: ${err}\n`);
-            res.end();
+            completeSession(sessionId, err);
         });
 
         stream.on('end', () => {
-            res.end();
-        });
-
-        // Handle client disconnect
-        req.on('close', () => {
-            console.log('[API] Client disconnected.');
-            stream.removeAllListeners();
+            console.log(`[API] Session ${sessionId} complete`);
+            completeSession(sessionId);
         });
 
     } catch (error) {
         if (error instanceof z.ZodError) {
-            res.status(400).send(`Invalid parameters: ${JSON.stringify((error as any).errors)}`);
+            res.status(400).json({ error: 'Invalid parameters', details: (error as any).errors });
         } else {
-            res.status(500).send('Internal server error');
+            res.status(500).json({ error: 'Internal server error' });
         }
     }
 });

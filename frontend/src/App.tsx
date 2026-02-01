@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import ServerSelector from './components/ServerSelector';
 import TestConfigForm from './components/TestConfigForm';
 import ResultsPanel from './components/ResultsPanel';
@@ -10,71 +10,44 @@ function App() {
   const [selectedServer, setSelectedServer] = useState<any>(null);
   const [privateHost, setPrivateHost] = useState('');
   const [port, setPort] = useState('5201'); // Unified port state
-  const [ipVersion, setIpVersion] = useState<'ipv4' | 'ipv6'>('ipv4');
 
-  // Auto-fill port when public server changes
-  React.useEffect(() => {
-    if (mode === 'public' && selectedServer) {
-      const portsStr = selectedServer.ports;
-      let defaultPort = '5201';
-
-      if (portsStr.includes('-')) {
-        const [start] = portsStr.split('-').map(Number);
-        defaultPort = start.toString();
-      } else if (portsStr.includes(',')) {
-        const list = portsStr.split(',').map((s: string) => s.trim());
-        defaultPort = list[0];
-      } else {
-        defaultPort = portsStr;
-      }
-      setPort(defaultPort);
-    }
-  }, [selectedServer, mode]);
-
-  // Test Config State
+  // Test Configuration State
   const [protocol, setProtocol] = useState<'tcp' | 'udp'>('tcp');
-  const [direction, setDirection] = useState<'normal' | 'reverse' | 'bidirectional'>('normal');
+  const [ipVersion, setIpVersion] = useState<'ipv4' | 'ipv6'>('ipv4');
   const [duration, setDuration] = useState(10);
-  const [streams, setStreams] = useState(1);
-  const [bitrate, setBitrate] = useState('10M');
+  const [parallelStreams, setParallelStreams] = useState(1);
+  const [direction, setDirection] = useState<'normal' | 'reverse' | 'bidirectional'>('normal');
+  const [bitrate, setBitrate] = useState('');
   const [customArgs, setCustomArgs] = useState('');
 
-  // Execution State
-  const [isRunning, setIsRunning] = useState(false);
+  // Results State
   const [results, setResults] = useState<any>(null);
   const [error, setError] = useState('');
   const [rawOutput, setRawOutput] = useState('');
+  const [running, setRunning] = useState(false);
 
   const runTest = async () => {
-    setIsRunning(true);
-    setResults(null);
+    setRunning(true);
     setError('');
-    setRawOutput('');
 
-    const host = mode === 'public' ? selectedServer?.hostname : privateHost;
-    if (!host) {
-      setError('Please select a server or enter a hostname.');
-      setIsRunning(false);
-      return;
-    }
+    const serverHost = mode === 'public' && selectedServer
+      ? selectedServer.host
+      : privateHost;
 
-    // Use string port directly (user edited)
-    // Validate number?
-    const portNum = parseInt(port);
-    if (isNaN(portNum)) {
-      setError('Invalid port number');
-      setIsRunning(false);
+    if (!serverHost) {
+      setError('Please select or enter a server');
+      setRunning(false);
       return;
     }
 
     const payload = {
       mode,
       protocol,
-      ipVersion: mode === 'public' && selectedServer?.ipVersion.includes('IPv6') && ipVersion === 'ipv6' ? 'ipv6' : 'ipv4',
-      serverHost: host,
-      port: portNum,
+      ipVersion,
+      serverHost,
+      port: parseInt(port) || 5201,
       duration,
-      parallelStreams: protocol === 'tcp' ? streams : undefined,
+      parallelStreams,
       reverse: direction === 'reverse',
       bidirectional: direction === 'bidirectional',
       bitrate: protocol === 'udp' ? bitrate : undefined,
@@ -86,124 +59,137 @@ function App() {
       setRawOutput('Connecting to server...\n');
       setResults(null);
 
-      // Bypass Vite proxy to rule out buffering issues
+      // Start the test and get session ID
       const backendUrl = 'http://localhost:3000/api/run-iperf-stream';
+      console.log('[Frontend] Starting test, requesting session ID');
+
       const response = await fetch(backendUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      if (!response.body) {
-        throw new Error('ReadableStream not supported in this browser.');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      setRawOutput((prev) => prev + 'Connected. Starting stream...\n\n');
+      const { sessionId } = await response.json();
+      console.log('[Frontend] Got session ID:', sessionId);
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let fullOutput = '';
+      setRawOutput((prev) => prev + 'Connected. Starting test...\n\n');
 
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        const chunk = decoder.decode(value || new Uint8Array(), { stream: !done });
+      // Poll for output
+      let nextIndex = 0;
+      let pollInterval: any;
 
-        if (chunk) {
-          setRawOutput((prev) => prev + chunk);
+      const poll = async () => {
+        try {
+          const pollUrl = `http://localhost:3000/api/iperf-poll/${sessionId}?fromIndex=${nextIndex}`;
+          const pollResponse = await fetch(pollUrl);
+
+          if (!pollResponse.ok) {
+            console.error('[Frontend] Poll failed:', pollResponse.status);
+            return;
+          }
+
+          const data = await pollResponse.json();
+          console.log(`[Frontend] Poll returned ${data.lines.length} lines, complete: ${data.isComplete}`);
+
+          // Append new lines
+          if (data.lines.length > 0) {
+            const newOutput = data.lines.join('\n') + '\n';
+            setRawOutput((prev) => prev + newOutput);
+            nextIndex = data.nextIndex;
+          }
+
+          // Check if complete
+          if (data.isComplete) {
+            clearInterval(pollInterval);
+            console.log('[Frontend] Test complete');
+
+            if (data.error) {
+              setError(data.error);
+            }
+            setRunning(false);
+          }
+        } catch (err) {
+          console.error('[Frontend] Poll error:', err);
         }
-        fullOutput += chunk;
-      }
+      };
 
-      // Parse Speedometer
-      // buffer += chunk;
-      // const lines = buffer.split('\n');
-      // // Keep the last incomplete line in buffer
-      // buffer = lines.pop() || '';
+      // Poll every 100ms
+      pollInterval = setInterval(poll, 100);
 
-      // for (const line of lines) {
-      //   // Regex for: [  5]   1.00-2.00   sec  10.0 MBytes  83.9 Mbits/sec
-      //   // Matches Mbits/sec or Gbits/sec
-      //   const match = line.match(/sec\s+[\d.]+\s+[KMG]Bytes\s+([\d.]+)\s+([KMG]bits\/sec)/);
-      //   if (match) {
-      //     const val = parseFloat(match[1]);
-      //     const unit = match[2];
-      //     // Normalize to Mbps
-      //     let speedMbps = val;
-      //     if (unit.startsWith('G')) speedMbps *= 1000;
-      //     if (unit.startsWith('K')) speedMbps /= 1000;
-      //     // Update transient state for speedometer (not created yet, need to add state)
-      //     setCurrentSpeed(speedMbps);
-      //   }
-      // }
+      // Initial poll
+      await poll();
 
-      // Parse final results from text for the panel (Legacy support for structured data)
-      // Since we don't get JSON anymore, we must construct a dummy result object OR update ResultsPanel to parse text.
-      // We'll leave results as null and act on rawOutput in ResultsPanel.
-
-    } catch (e: any) {
-      setError('Network error: ' + e.message);
-    } finally {
-      setIsRunning(false);
+    } catch (error: any) {
+      setError(error.message || 'Unknown error');
+      console.error('[Frontend] Error:', error);
+      setRunning(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 p-4 md:p-8">
-      <div className="max-w-5xl mx-auto">
-        <header className="mb-8 text-center flex flex-col items-center">
-          <img
-            src="/logo.jpg"
-            alt="Praslab Logo"
-            className="h-16 mb-4 rounded-full shadow-lg"
-            style={{ maxHeight: '64px', width: 'auto', maxWidth: '100%' }}
-          />
-          <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent mb-2">
-            Web iPerf3 Tool
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <header className="text-center py-8">
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
+            Praslab Network Test
           </h1>
-          <p className="text-gray-400">Measure network performance with TCP/UDP tests & BDP calculations</p>
+          <p className="text-gray-400 mt-2">Professional iPerf3 Testing Platform</p>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Main Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column: Server + Config */}
           <div className="lg:col-span-2 space-y-6">
             <ServerSelector
-              mode={mode} setMode={setMode}
-              selectedServer={selectedServer} setSelectedServer={setSelectedServer}
-              privateHost={privateHost} setPrivateHost={setPrivateHost}
-              port={port} setPort={setPort}
-              ipVersion={ipVersion} setIpVersion={setIpVersion}
+              mode={mode}
+              setMode={setMode}
+              selectedServer={selectedServer}
+              setSelectedServer={setSelectedServer}
+              privateHost={privateHost}
+              setPrivateHost={setPrivateHost}
+              port={port}
+              setPort={setPort}
+              ipVersion={ipVersion}
+              setIpVersion={setIpVersion}
             />
 
             <TestConfigForm
-              protocol={protocol} setProtocol={setProtocol}
-              direction={direction} setDirection={setDirection}
-              duration={duration} setDuration={setDuration}
-              streams={streams} setStreams={setStreams}
-              bitrate={bitrate} setBitrate={setBitrate}
-              customArgs={customArgs} setCustomArgs={setCustomArgs}
+              protocol={protocol}
+              setProtocol={setProtocol}
+              duration={duration}
+              setDuration={setDuration}
+              streams={parallelStreams}
+              setStreams={setParallelStreams}
+              direction={direction}
+              setDirection={setDirection}
+              bitrate={bitrate}
+              setBitrate={setBitrate}
+              customArgs={customArgs}
+              setCustomArgs={setCustomArgs}
+              isRunning={running}
               onRunKey={runTest}
-              isRunning={isRunning}
             />
 
             <ResultsPanel
               results={results}
               error={error}
               rawOutput={rawOutput}
-              isRunning={isRunning}
+              isRunning={running}
             />
           </div>
 
-          <div className="lg:col-span-1">
-            <div className="sticky top-8">
-              <BDPCalculator currentHost={mode === 'public' ? selectedServer?.hostname : privateHost} />
-            </div>
+          {/* Right Column: BDP Calculator */}
+          <div>
+            <BDPCalculator
+              currentHost={mode === 'public' && selectedServer ? selectedServer.host : privateHost}
+            />
           </div>
         </div>
-
-        <footer className="mt-12 text-center text-gray-600 text-sm">
-          <p>&copy; {new Date().getFullYear()} Prasath Suthagar @Praslab.com. Open Source License.</p>
-        </footer>
       </div>
     </div>
   );

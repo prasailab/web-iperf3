@@ -149,20 +149,16 @@ const BDPCalculator: React.FC<BDPCalculatorProps> = ({ currentHost }) => {
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            <div className="flex justify-between border-b border-gray-800 pb-2">
+                            <div className="flex justify-between items-center border-b border-gray-800 pb-2">
                                 <span className="text-gray-400">BDP (Bits)</span>
                                 <span className="font-mono text-white">{result.bdpBits.toLocaleString()}</span>
                             </div>
-                            <div className="flex justify-between border-b border-gray-800 pb-2">
-                                <span className="text-gray-400">Recv Window (Bytes)</span>
-                                <span className="font-mono text-secondary font-bold">{result.rwndBytes.toLocaleString()}</span>
+                            <div className="flex justify-between items-center border-b border-gray-800 pb-2">
+                                <span className="text-gray-400">TCP Window Size (KB)</span>
+                                <span className="font-mono text-secondary font-bold text-lg">{(result.rwndBytes / 1024).toFixed(2)} KB</span>
                             </div>
-                            <div className="flex justify-between border-b border-gray-800 pb-2">
-                                <span className="text-gray-400">Recv Window (MiB)</span>
-                                <span className="font-mono text-white">{result.rwndMiB} MiB</span>
-                            </div>
-                            <div className="flex justify-between pt-2">
-                                <span className="text-gray-400">Max Theoretical T-put</span>
+                            <div className="flex justify-between items-center pt-2">
+                                <span className="text-gray-400">Max Theoretical Throughput</span>
                                 <span className="font-mono text-primary font-bold">{result.theoreticalThroughputMbps} Mbps</span>
                             </div>
                         </div>

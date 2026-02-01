@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const iperfRunner_1 = require("../services/iperfRunner");
+const sessionManager_1 = require("../services/sessionManager");
 const zod_1 = require("zod");
 const router = (0, express_1.Router)();
 const iperfSchema = zod_1.z.object({
@@ -45,40 +46,32 @@ router.post('/run-iperf-stream', async (req, res) => {
             res.status(400).send('Invalid host');
             return;
         }
-        // Set headers for streaming text
-        // Disable Nginx/Proxy buffering if any
-        res.setHeader('X-Accel-Buffering', 'no');
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Transfer-Encoding', 'chunked');
-        res.flushHeaders(); // Explicitly flush headers
-        console.log('[API] Initializing stream via runIperfStream...');
-        // Import is now top-level (see below), but we use the imported function
+        // Generate session ID
+        const sessionId = (0, sessionManager_1.generateSessionId)();
+        (0, sessionManager_1.createSession)(sessionId);
+        console.log(`[API] Created session ${sessionId}`);
+        // Return session ID immediately
+        res.json({ sessionId });
+        // Start iPerf test in background
         const stream = (0, iperfRunner_1.runIperfStream)(options);
-        // Send checking message immediately
-        res.write('DEBUG: Stream initialized on server...\n');
         stream.on('data', (data) => {
-            res.write(data);
+            (0, sessionManager_1.appendOutput)(sessionId, data);
         });
         stream.on('error', (err) => {
             console.error('[API] Stream error:', err);
-            res.write(`\nERROR: ${err}\n`);
-            res.end();
+            (0, sessionManager_1.completeSession)(sessionId, err);
         });
         stream.on('end', () => {
-            res.end();
-        });
-        // Handle client disconnect
-        req.on('close', () => {
-            console.log('[API] Client disconnected.');
-            stream.removeAllListeners();
+            console.log(`[API] Session ${sessionId} complete`);
+            (0, sessionManager_1.completeSession)(sessionId);
         });
     }
     catch (error) {
         if (error instanceof zod_1.z.ZodError) {
-            res.status(400).send(`Invalid parameters: ${JSON.stringify(error.errors)}`);
+            res.status(400).json({ error: 'Invalid parameters', details: error.errors });
         }
         else {
-            res.status(500).send('Internal server error');
+            res.status(500).json({ error: 'Internal server error' });
         }
     }
 });
