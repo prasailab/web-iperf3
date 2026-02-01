@@ -108,7 +108,23 @@ function App() {
             console.log('[Frontend] Test complete');
 
             if (data.error) {
-              setError(data.error);
+              // Check if it's a connection timeout error
+              const isConnectionTimeout = data.error.includes('unable to connect') ||
+                data.error.includes('Connection timed out') ||
+                data.error.includes('Connection refused');
+
+              if (isConnectionTimeout && mode === 'public' && selectedServer) {
+                // Suggest alternative ports
+                const availablePorts = selectedServer.ports || '5201-5209';
+                setError(`Connection failed to ${serverHost}:${port}\n\n` +
+                  `💡 Suggestions:\n` +
+                  `• Try a different port from available: ${availablePorts}\n` +
+                  `• Port ${port} might be busy or blocked by firewall\n` +
+                  `• Try selecting a different public server\n\n` +
+                  `Original error: ${data.error}`);
+              } else {
+                setError(data.error);
+              }
             }
             setRunning(false);
           }
