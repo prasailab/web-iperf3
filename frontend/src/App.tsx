@@ -157,9 +157,13 @@ function App() {
                 data.error.includes('Connection timed out') ||
                 data.error.includes('Connection refused');
 
-              // Check for non-fatal errors (e.g., partial results from crash)
-              // "unable to receive results" often happens in bidirectional mode crashes but data is captured
-              const isNonFatal = data.error.includes('unable to receive results') && data.output && data.output.length > 50;
+              // Check if it's a generic exit code error and we have logs
+              // "Exited with code 1" isn't helpful to show in red if we have logs.
+              // The logs usually contain the real error (e.g. "unable to receive results")
+              const isExitCodeError = data.error.includes('Exited with code');
+              const isKnownError = isExitCodeError || data.error.includes('unable to receive results');
+
+              const isNonFatal = isKnownError && nextIndex > 5;
 
               if (isConnectionTimeout && mode === 'public' && selectedServer) {
                 // Suggest alternative ports
@@ -172,7 +176,7 @@ function App() {
                   `Original error: ${data.error}`);
               } else if (isNonFatal) {
                 console.warn('[Frontend] Suppressing non-fatal error:', data.error);
-                setRawOutput(data.output + '\n\n[Warning] ' + data.error);
+                setRawOutput(prev => prev + '\n\n[Warning] Test finished: ' + data.error);
               } else {
                 setError(data.error);
               }
