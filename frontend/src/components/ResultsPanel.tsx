@@ -6,7 +6,17 @@ interface ResultsPanelProps {
     results: any;
     error: string;
     rawOutput: string;
+
     isRunning: boolean;
+    actualRTT?: number; // Passed from App.tsx
+    testConfig?: {
+        direction: 'normal' | 'reverse' | 'bidirectional';
+        customArgs: string;
+        protocol: string;
+        duration: number;
+        streams: number;
+        mss?: string;
+    };
 }
 
 // RFC 6349 Calculator Functions (client-side)
@@ -20,7 +30,16 @@ interface ParsedMetrics {
     cwnd?: number;
     mtu?: number;  // Path MTU
     mss?: number;  // Maximum Segment Size
+    windowSize?: number; // TCP Window Size in Bytes
     retransmitRate?: number;  // Retransmissions per second
+    cpuUtilization?: {
+        hostTotal: number;
+        hostUser: number;
+        hostSystem: number;
+        remoteTotal: number;
+        remoteUser: number;
+        remoteSystem: number;
+    };
 }
 
 function parseIperfOutput(rawOutput: string): ParsedMetrics {
@@ -34,9 +53,19 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
 
     if (!rawOutput) return metrics;
 
-    // Parse sender line - flexible regex for actual iPerf3 format
+    // For parallel streams (-P > 1), look for [SUM] lines
+    // Example: [SUM]   0.00-10.00  sec   456 MBytes   383 Mbits/sec    5             sender
+    const sumSenderMatch = rawOutput.match(/\[SUM\]\s+[\d.]+\s*-\s*([\d.]+)\s+sec\s+([\d.]+)\s+([KMG]?)Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+(\d+)\s+sender/i);
+    const sumReceiverMatch = rawOutput.match(/\[SUM\]\s+[\d.]+\s*-\s*[\d.]+\s+sec\s+[\d.]+\s+[KMG]?Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+receiver/i);
+
+    // For single stream, look for regular lines with stream ID
     // Example: [  5]   0.00-10.01  sec   114 MBytes  95.7 Mbits/sec    0             sender
-    const senderMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*([\d.]+)\s+sec\s+([\d.]+)\s+([KMG]?)Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+(\d+)\s+sender/i);
+    const singleSenderMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*([\d.]+)\s+sec\s+([\d.]+)\s+([KMG]?)Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+(\d+)\s+sender/i);
+    const singleReceiverMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*[\d.]+\s+sec\s+[\d.]+\s+[KMG]?Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+receiver/i);
+
+    // Prefer [SUM] if available (parallel streams), otherwise use single stream
+    const senderMatch = sumSenderMatch || singleSenderMatch;
+    const receiverMatch = sumReceiverMatch || singleReceiverMatch;
 
     if (senderMatch) {
         // Duration from interval
@@ -63,10 +92,6 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
         console.log('[PDF Parser] Sender parsed:', metrics.senderThroughput, 'Mbps');
     }
 
-    // Parse receiver line
-    // Example: [  5]   0.00-10.01  sec   114 MBytes  95.5 Mbits/sec                  receiver
-    const receiverMatch = rawOutput.match(/\[\s*\d+\]\s+[\d.]+\s*-\s*[\d.]+\s+sec\s+[\d.]+\s+[KMG]?Bytes\s+([\d.]+)\s+([KMG]?)bits\/sec\s+receiver/i);
-
     if (receiverMatch) {
         let throughput = parseFloat(receiverMatch[1]);
         const unit = receiverMatch[2];
@@ -78,17 +103,56 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
         metrics.receiverThroughput = metrics.senderThroughput;
     }
 
-    // Extract MTU/MSS if present in output
-    // iPerf3 may show: "local ... port ... connected to ... port ... (MSS=1460)"
-    const mssMatch = rawOutput.match(/MSS=(\d+)/);
+    // Extract MTU/MSS if present
+    const mssMatch = rawOutput.match(/MSS[=\s]+(\d+)/i);
     if (mssMatch) {
         metrics.mss = parseInt(mssMatch[1]);
-        // MTU = MSS + TCP header (20) + IP header (20)
         metrics.mtu = metrics.mss + 40;
     } else {
         // Default Ethernet MTU
         metrics.mtu = 1500;
         metrics.mss = 1460;
+    }
+
+    // Parse CPU Utilization
+    // Example: CPU Utilization: local/sender 3.8% (0.6%u/3.2%s), remote/receiver 0.7% (0.1%u/0.7%s)
+    const cpuMatch = rawOutput.match(/CPU Utilization: local\/sender ([\d.]+)%.*remote\/receiver ([\d.]+)%/i);
+    if (cpuMatch) {
+        // Detailed parsing can be added if needed, extracting just totals for now
+        // Or full parsing: 
+        const fullCpuMatch = rawOutput.match(/CPU Utilization: local\/sender ([\d.]+)% \(([\d.]+)%u\/([\d.]+)%s\), remote\/receiver ([\d.]+)% \(([\d.]+)%u\/([\d.]+)%s\)/i);
+        if (fullCpuMatch) {
+            metrics.cpuUtilization = {
+                hostTotal: parseFloat(fullCpuMatch[1]),
+                hostUser: parseFloat(fullCpuMatch[2]),
+                hostSystem: parseFloat(fullCpuMatch[3]),
+                remoteTotal: parseFloat(fullCpuMatch[4]),
+                remoteUser: parseFloat(fullCpuMatch[5]),
+                remoteSystem: parseFloat(fullCpuMatch[6])
+            };
+        } else {
+            // Fallback for simple percentage
+            metrics.cpuUtilization = {
+                hostTotal: parseFloat(cpuMatch[1]),
+                hostUser: 0,
+                hostSystem: 0,
+                remoteTotal: parseFloat(cpuMatch[2]),
+                remoteUser: 0,
+                remoteSystem: 0
+            };
+        }
+    }
+
+    // Parse TCP Window Size (Output header)
+    // Example: TCP window size: 85.3 KByte (default)
+    const windowMatch = rawOutput.match(/TCP window size:\s+([\d.]+)\s+([KMG]?Byte)/i);
+    if (windowMatch) {
+        let size = parseFloat(windowMatch[1]);
+        const unit = windowMatch[2];
+        if (unit.toLowerCase().startsWith('g')) size *= 1024 * 1024 * 1024;
+        else if (unit.toLowerCase().startsWith('m')) size *= 1024 * 1024;
+        else if (unit.toLowerCase().startsWith('k')) size *= 1024;
+        metrics.windowSize = size;
     }
 
     // Calculate retransmission rate
@@ -117,15 +181,18 @@ function calculateRFC6349Metrics(parsed: ParsedMetrics, estimatedRTT: number = 5
     const transferEfficiency = (throughput / estimatedBandwidth) * 100;
 
     // TCP efficiency = (throughput / theoretical max) × 100
-    const theoreticalMaxMbps = (actualWindowSize * 8) / rttSec / 1000000;
+    const theoreticalMaxMbps = (parsed.windowSize || actualWindowSize * 8) / rttSec / 1000000;
     const tcpEfficiency = (throughput / theoreticalMaxMbps) * 100;
 
     // Buffer delay
+    const windowToUse = parsed.windowSize || actualWindowSize;
     const throughputBps = throughput * 1000000;
-    const bufferDelay = throughputBps > 0 ? ((actualWindowSize * 8) / throughputBps * 1000) - estimatedRTT : 0;
+    const bufferDelay = throughputBps > 0 ? ((windowToUse * 8) / throughputBps * 1000) - estimatedRTT : 0;
 
     // Packet loss
-    const estimatedPackets = parsed.totalBytes / 1460;  // Assume ~1460 byte packets
+    // Use MSS from parsed data if avail, else default 1460
+    const mss = parsed.mss || 1460;
+    const estimatedPackets = parsed.totalBytes / mss;
     const packetLoss = estimatedPackets > 0 ? (parsed.retransmissions / estimatedPackets) * 100 : 0;
 
     // Performance grade
@@ -136,7 +203,7 @@ function calculateRFC6349Metrics(parsed: ParsedMetrics, estimatedRTT: number = 5
 
     // Recommendations
     const recommendations: string[] = [];
-    if (actualWindowSize < idealWindowSize * 0.8) {
+    if (windowToUse < idealWindowSize * 0.8) {
         recommendations.push(`Increase TCP window size to ${Math.round(idealWindowSize / 1024)} KB`);
     }
     if (packetLoss > 1) {
@@ -155,7 +222,7 @@ function calculateRFC6349Metrics(parsed: ParsedMetrics, estimatedRTT: number = 5
     return {
         bdp,
         idealWindowSize,
-        actualWindowSize,
+        actualWindowSize: windowToUse,
         transferEfficiency,
         tcpEfficiency,
         bufferDelay: Math.max(0, bufferDelay),
@@ -167,7 +234,7 @@ function calculateRFC6349Metrics(parsed: ParsedMetrics, estimatedRTT: number = 5
     };
 }
 
-const ResultsPanel: React.FC<ResultsPanelProps> = ({ results, error, rawOutput, isRunning }) => {
+const ResultsPanel: React.FC<ResultsPanelProps> = ({ results, error, rawOutput, isRunning, actualRTT, testConfig }) => {
     if (!results && !error && !rawOutput && !isRunning) return null;
 
     const generatePDF = async () => {
@@ -218,7 +285,28 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ results, error, rawOutput, 
 
             // Parse metrics
             const parsed = parseIperfOutput(rawOutput);
-            const rfc6349 = calculateRFC6349Metrics(parsed);
+
+            // Override with config values if output parsing missed them but args existed
+            if (testConfig?.mss && !parsed.mss) {
+                parsed.mss = parseInt(testConfig.mss);
+                parsed.mtu = parsed.mss + 40;
+            }
+            // Check for -w in custom args if window size wasn't in output
+            if (!parsed.windowSize && testConfig?.customArgs) {
+                const wMatch = testConfig.customArgs.match(/-w\s+(\d+)([KMG]?)/i);
+                if (wMatch) {
+                    let val = parseInt(wMatch[1]);
+                    const unit = wMatch[2].toUpperCase();
+                    if (unit === 'K') val *= 1024;
+                    else if (unit === 'M') val *= 1024 * 1024;
+                    else if (unit === 'G') val *= 1024 * 1024 * 1024;
+                    parsed.windowSize = val;
+                }
+            }
+
+            // Use actual RTT from ping if available, otherwise default to 50ms (or extracted if possible in future)
+            const rttToUse = actualRTT || 50;
+            const rfc6349 = calculateRFC6349Metrics(parsed, rttToUse);
 
             // ========== EXECUTIVE SUMMARY ==========
             doc.setFontSize(14);
@@ -256,8 +344,8 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ results, error, rawOutput, 
             const configData = [
                 ["Parameter", "Value"],
                 ["Test Duration", `${parsed.duration} seconds`],
-                ["Protocol", "TCP"],
-                ["Direction", "Upload"],
+                ["Protocol", testConfig?.protocol.toUpperCase() || "TCP"],
+                ["Direction", testConfig?.direction ? testConfig.direction.charAt(0).toUpperCase() + testConfig.direction.slice(1) : "Upload"],
                 ["Total Data Transferred", `${(parsed.totalBytes / 1024 / 1024).toFixed(2)} MB`]
             ];
 
@@ -279,19 +367,41 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ results, error, rawOutput, 
             doc.text("Primary Metrics", 14, yPos);
             yPos += 5;
 
-            // Use the maximum throughput value (handles both normal and reverse mode)
-            const throughput = Math.max(parsed.senderThroughput, parsed.receiverThroughput);
+
 
             const primaryData = [
-                ["Metric", "Value", "Description"],
-                ["Throughput", `${throughput.toFixed(2)} Mbps`, "Test throughput"],
+                ["Metric", "Value", "Description"]
+            ];
+
+            const direction = testConfig?.direction || 'normal';
+
+            // Upload row
+            if (direction !== 'reverse') {
+                primaryData.push(["Upload Throughput", `${parsed.senderThroughput.toFixed(2)} Mbps`, "Sender bandwidth"]);
+            } else {
+                primaryData.push(["Upload Throughput", "N/A", "Skipped (Reverse Mode)"]);
+            }
+
+            // Download row
+            if (direction === 'reverse' || direction === 'bidirectional') {
+                primaryData.push(["Download Throughput", `${parsed.receiverThroughput.toFixed(2)} Mbps`, "Receiver bandwidth"]);
+            } else {
+                primaryData.push(["Download Throughput", "N/A", "Skipped (Upload only)"]);
+            }
+
+            primaryData.push(
                 ["Path MTU", `${parsed.mtu || 1500} bytes`, "Maximum Transmission Unit"],
                 ["MSS", `${parsed.mss || 1460} bytes`, "Maximum Segment Size"],
                 ["Retransmissions", `${parsed.retransmissions}`, "Total packets retransmitted"],
                 ["Retransmit Rate", `${(parsed.retransmitRate || 0).toFixed(2)}/sec`, "Retransmissions per second"],
-                ["Round-Trip Time (Est.)", `${rfc6349.estimatedRTT} ms`, "Network latency"],
+                ["Round-Trip Time (Measured)", `${rfc6349.estimatedRTT} ms`, "Actual Network latency (Ping)"],
                 ["Bottleneck Bandwidth (Est.)", `${rfc6349.estimatedBandwidth} Mbps`, "Available bandwidth"]
-            ];
+            );
+
+            if (parsed.cpuUtilization) {
+                primaryData.push(["CPU Util (Sender)", `${parsed.cpuUtilization.hostTotal.toFixed(1)}%`, "Local Host Usage"]);
+                primaryData.push(["CPU Util (Receiver)", `${parsed.cpuUtilization.remoteTotal.toFixed(1)}%`, "Remote Server Usage"]);
+            }
 
             autoTable(doc, {
                 head: [primaryData[0]],

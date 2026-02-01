@@ -14,6 +14,14 @@ interface ParsedMetrics {
     mtu?: number;
     mss?: number;
     retransmitRate?: number;
+    cpuUtilization?: {
+        hostTotal: number;
+        hostUser: number;
+        hostSystem: number;
+        remoteTotal: number;
+        remoteUser: number;
+        remoteSystem: number;
+    };
 }
 
 function parseIperfOutput(rawOutput: string): ParsedMetrics {
@@ -79,6 +87,20 @@ function parseIperfOutput(rawOutput: string): ParsedMetrics {
 
     if (metrics.duration > 0) {
         metrics.retransmitRate = metrics.retransmissions / metrics.duration;
+    }
+
+    // Parse CPU Utilization
+    // Example: CPU Utilization: local/sender 3.8% (0.6%u/3.2%s), remote/receiver 0.7% (0.1%u/0.7%s)
+    const cpuMatch = rawOutput.match(/CPU Utilization: local\/sender ([\d.]+)%.*remote\/receiver ([\d.]+)%/i);
+    if (cpuMatch) {
+        metrics.cpuUtilization = {
+            hostTotal: parseFloat(cpuMatch[1]),
+            hostUser: 0,
+            hostSystem: 0,
+            remoteTotal: parseFloat(cpuMatch[2]),
+            remoteUser: 0,
+            remoteSystem: 0
+        };
     }
 
     return metrics;
@@ -156,7 +178,8 @@ Reverse mode, remote host 217.161.120.178 is sending
 [  5]   9.00-10.00  sec  12.0 MBytes   101 Mbits/sec                  
 - - - - - - - - - - - - - - - - - - - - - - - - -
 [  5]   0.00-10.00  sec   121 MBytes   101 Mbits/sec    3             sender
-[  5]   0.00-10.00  sec   121 MBytes   101 Mbits/sec                  receiver`;
+[  5]   0.00-10.00  sec   121 MBytes   101 Mbits/sec                  receiver
+CPU Utilization: local/sender 3.8% (0.6%u/3.2%s), remote/receiver 0.7% (0.1%u/0.7%s)`;
 
 // Run tests
 console.log("=== Test Case 1: Single Stream Upload ===");
@@ -193,3 +216,10 @@ console.log("Receiver Throughput:", result4.receiverThroughput, "Mbps (Expected:
 console.log("Total Bytes:", (result4.totalBytes / 1024 / 1024).toFixed(2), "MB (Expected: 121)");
 console.log("Retransmissions:", result4.retransmissions, "(Expected: 3)");
 console.log("Duration:", result4.duration, "sec (Expected: 10.00)");
+if (result4.cpuUtilization) {
+    console.log("CPU Sender:", result4.cpuUtilization.hostTotal, "% (Expected: 3.8)");
+    console.log("CPU Receiver:", result4.cpuUtilization.remoteTotal, "% (Expected: 0.7)");
+} else {
+    console.log("CPU Utilization: Not found (FAILED)");
+}
+

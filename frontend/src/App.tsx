@@ -25,6 +25,7 @@ function App() {
   const [error, setError] = useState('');
   const [rawOutput, setRawOutput] = useState('');
   const [running, setRunning] = useState(false);
+  const [actualRTT, setActualRTT] = useState<number | undefined>(undefined);
 
   const runTest = async () => {
     setRunning(true);
@@ -60,6 +61,47 @@ function App() {
       // Clear previous
       setRawOutput('Connecting to server...\n');
       setResults(null);
+      setActualRTT(undefined);
+
+      // Step 1: Run Ping to get RTT
+      let currentRtt = 50; // Default fallback
+      if (mode === 'public' && selectedServer) {
+        // Skip ping for public servers or implement if needed (CORS might be issue, but we use backend proxy)
+        // For now, let's try to ping the hostname
+        console.log('[Frontend] Pinging server:', serverHost);
+        setRawOutput((prev) => prev + `Pinging ${serverHost}...\n`);
+        try {
+          const pingRes = await fetch(`http://localhost:3000/api/ping?host=${encodeURIComponent(serverHost)}`);
+          const pingData = await pingRes.json();
+          if (pingData.rttAvg) {
+            currentRtt = pingData.rttAvg;
+            setActualRTT(currentRtt);
+            setRawOutput((prev) => prev + `Ping successful. RTT: ${currentRtt} ms\n\n`);
+          } else {
+            setRawOutput((prev) => prev + `Ping failed or no RTT. Using default.\n\n`);
+          }
+        } catch (e) {
+          console.error('[Frontend] Ping error:', e);
+          setRawOutput((prev) => prev + `Ping error. Using default.\n\n`);
+        }
+      } else if (mode === 'private') {
+        console.log('[Frontend] Pinging server:', serverHost);
+        setRawOutput((prev) => prev + `Pinging ${serverHost}...\n`);
+        try {
+          const pingRes = await fetch(`http://localhost:3000/api/ping?host=${encodeURIComponent(serverHost)}`);
+          const pingData = await pingRes.json();
+          if (pingData.rttAvg) {
+            currentRtt = pingData.rttAvg;
+            setActualRTT(currentRtt);
+            setRawOutput((prev) => prev + `Ping successful. RTT: ${currentRtt} ms\n\n`);
+          } else {
+            setRawOutput((prev) => prev + `Ping failed or no RTT. Using default.\n\n`);
+          }
+        } catch (e) {
+          console.error('[Frontend] Ping error:', e);
+          setRawOutput((prev) => prev + `Ping error. Using default.\n\n`);
+        }
+      }
 
       // Start the test and get session ID
       const backendUrl = 'http://localhost:3000/api/run-iperf-stream';
@@ -198,6 +240,15 @@ function App() {
               error={error}
               rawOutput={rawOutput}
               isRunning={running}
+              actualRTT={actualRTT} // Passed from automated ping
+              testConfig={{
+                direction,
+                customArgs,
+                protocol,
+                duration,
+                streams: parallelStreams,
+                mss: customArgs.match(/-M\s+(\d+)/)?.[1] // Extract MSS from args if present
+              }}
             />
           </div>
 
