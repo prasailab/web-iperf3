@@ -201,7 +201,12 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ results, error, rawOutput, 
             doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, yPos, { align: 'center' });
             doc.text("Praslab Network Testing Platform", pageWidth / 2, yPos + 5, { align: 'center' });
 
-            yPos += 15;
+            // Contact information
+            doc.setFontSize(8);
+            doc.setTextColor(41, 128, 185);
+            doc.text("https://praslab.com | hello@praslab.com", pageWidth / 2, yPos + 10, { align: 'center' });
+
+            yPos += 20;
 
             // Parse metrics
             const parsed = parseIperfOutput(rawOutput);
@@ -372,6 +377,24 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({ results, error, rawOutput, 
                     doc.text(cleanLine, 14, yPos);
                     yPos += 3.5;
                 });
+            }
+
+            // ========== FOOTER ON ALL PAGES ==========
+            const pageCount = doc.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                const pageHeight = doc.internal.pageSize.height;
+
+                // Footer line
+                doc.setDrawColor(200);
+                doc.line(14, pageHeight - 15, pageWidth - 14, pageHeight - 15);
+
+                // Footer text
+                doc.setFontSize(8);
+                doc.setTextColor(100);
+                doc.text("Praslab Network Testing Platform", 14, pageHeight - 10);
+                doc.text(`https://praslab.com | hello@praslab.com`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+                doc.text(`Page ${i} of ${pageCount}`, pageWidth - 14, pageHeight - 10, { align: 'right' });
             }
 
             doc.save("praslab_rfc6349_report.pdf");
